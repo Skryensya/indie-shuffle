@@ -1,0 +1,137 @@
+<div class="min-h-screen bg-gray-50 py-8 relative">
+  <!-- Cover Image -->
+  <div class="absolute inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+  </div>
+  <div class="relative z-10">
+  <.ui_container>
+    <!-- Header -->
+    <.ui_card>
+      <.ui_card_header>
+        <h1 class="text-2xl font-bold text-gray-900">UI Component Suite</h1>
+        <p class="text-gray-600 mt-1">A collection of reusable components for max-w-sm layouts</p>
+      </.ui_card_header>
+    </.ui_card>
+
+    <!-- Buttons Section -->
+    <.ui_card>
+      <.ui_card_header>
+        <h2 class="text-lg font-semibold text-gray-900">Buttons</h2>
+      </.ui_card_header>
+      <.ui_card_content>
+        <div class="space-y-3">
+          <.ui_button>Primary Button</.ui_button>
+          <.ui_button variant="secondary">Secondary Button</.ui_button>
+          <.ui_button variant="outline">Outline Button</.ui_button>
+          <.ui_button variant="ghost">Ghost Button</.ui_button>
+          <.ui_button variant="danger">Danger Button</.ui_button>
+        </div>
+        
+        <div class="mt-4 space-y-3">
+          <h3 class="text-sm font-medium text-gray-700">Sizes</h3>
+          <.ui_button size="sm">Small</.ui_button>
+          <.ui_button size="md">Medium</.ui_button>
+          <.ui_button size="lg">Large</.ui_button>
+        </div>
+      </.ui_card_content>
+    </.ui_card>
+
+    <!-- Input Fields -->
+    <.ui_card>
+      <.ui_card_header>
+        <h2 class="text-lg font-semibold text-gray-900">Input Fields</h2>
+      </.ui_card_header>
+      <.ui_card_content>
+        <div class="space-y-3">
+          <.ui_input name="demo_name" placeholder="Enter your name" />
+          <.ui_input name="demo_email" placeholder="Email address" type="email" />
+          <.ui_input name="demo_password" placeholder="Password" type="password" />
+          <.ui_input name="demo_disabled" placeholder="Disabled input" disabled />
+        </div>
+      </.ui_card_content>
+    </.ui_card>
+
+    <!-- Badges -->
+    <.ui_card>
+      <.ui_card_header>
+        <h2 class="text-lg font-semibold text-gray-900">Badges</h2>
+      </.ui_card_header>
+      <.ui_card_content>
+        <div class="flex flex-wrap gap-2">
+          <.ui_badge>Default</.ui_badge>
+          <.ui_badge variant="success">Success</.ui_badge>
+          <.ui_badge variant="danger">Danger</.ui_badge>
+          <.ui_badge variant="warning">Warning</.ui_badge>
+          <.ui_badge variant="info">Info</.ui_badge>
+        </div>
+      </.ui_card_content>
+    </.ui_card>
+
+    <!-- Avatars -->
+    <.ui_card>
+      <.ui_card_header>
+        <h2 class="text-lg font-semibold text-gray-900">Avatars</h2>
+      </.ui_card_header>
+      <.ui_card_content>
+        <div class="flex items-center space-x-4">
+          <.ui_avatar name="John Doe" size="sm" />
+          <.ui_avatar name="Jane Smith" size="md" />
+          <.ui_avatar name="Bob Wilson" size="lg" />
+        </div>
+      </.ui_card_content>
+    </.ui_card>
+
+    <!-- Card Example -->
+    <.ui_card>
+      <.ui_card_header>
+        <h3 class="font-semibold text-gray-900">Product Card Example</h3>
+        <p class="text-sm text-gray-500">A complete card component showcase</p>
+      </.ui_card_header>
+      <.ui_card_content>
+        <p class="text-gray-600">
+          This is an example of a product or content card using our UI components.
+          It demonstrates the consistent spacing and typography.
+        </p>
+        <div class="mt-3">
+          <.ui_badge variant="success">In Stock</.ui_badge>
+        </div>
+      </.ui_card_content>
+      <.ui_card_footer>
+        <div class="flex justify-between items-center">
+          <.ui_badge variant="info">Featured</.ui_badge>
+          <.ui_button size="sm">Action</.ui_button>
+        </div>
+      </.ui_card_footer>
+    </.ui_card>
+
+    <!-- User Profile Example -->
+    <.ui_card>
+      <.ui_card_header>
+        <div class="flex items-center space-x-3">
+          <.ui_avatar name="Alex Rivera" size="md" />
+          <div>
+            <h3 class="font-semibold text-gray-900">Alex Rivera</h3>
+            <p class="text-sm text-gray-500">Product Designer</p>
+          </div>
+        </div>
+      </.ui_card_header>
+      <.ui_card_content>
+        <p class="text-gray-600">
+          Passionate about creating intuitive user experiences and beautiful interfaces.
+        </p>
+        <div class="mt-3 flex space-x-2">
+          <.ui_badge variant="success">Available</.ui_badge>
+          <.ui_badge>Remote</.ui_badge>
+        </div>
+      </.ui_card_content>
+      <.ui_card_footer>
+        <div class="flex space-x-2">
+          <.ui_button size="sm" class="flex-1">Connect</.ui_button>
+          <.ui_button variant="outline" size="sm" class="flex-1">Message</.ui_button>
+        </div>
+      </.ui_card_footer>
+    </.ui_card>
+
+  </.ui_container>
+  </div>
+</div>

@@ -1,0 +1,25 @@
+services:
+  # Phoenix Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      MIX_ENV: dev
+      PHX_HOST: localhost
+      PHX_PORT: 4000
+      SECRET_KEY_BASE: "your-secret-key-base-here-change-in-production"
+    ports:
+      - "4000:4000"
+    volumes:
+      # Mount source code for hot reloading
+      - .:/app
+      # Persist deps
+      - deps:/app/deps
+      - build:/app/_build
+    stdin_open: true
+    tty: true
+
+volumes:
+  deps:
+  build:

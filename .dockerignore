@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+deps/
+_build/
+node_modules/
+assets/node_modules/
+
+# Logs
+*.log
+
+# Database
+priv/static/uploads/
+
+# Cache
+.elixir_ls/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage
+cover/
+doc/
+
+# Temporary files
+tmp/
+temp/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+test/support/uploads/

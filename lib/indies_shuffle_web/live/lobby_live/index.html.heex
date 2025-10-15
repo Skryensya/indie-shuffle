@@ -1,0 +1,223 @@
+<div class="min-h-screen bg-white relative">
+  <!-- Cover Image -->
+  <div class="absolute inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+  </div>
+  <div class="relative z-10">
+  <!-- Admin Panel Link (discreto en la esquina superior derecha) -->
+  <div class="fixed top-2 right-2 z-50">
+    <.link navigate="/admin" class="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+      <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
+    </.link>
+  </div>
+
+  <%= if @checking_auth do %>
+    <!-- Loading State -->
+    <.ui_container id="auth-checker" phx-hook="AuthChecker" class="min-h-screen justify-center">
+      <.ui_card>
+        <.ui_card_content class="text-center py-12">
+          <div class="animate-spin w-12 h-12 border-4 border-orange-200 border-t-orange-600 rounded-full mx-auto mb-4"></div>
+          <h2 class="text-xl font-semibold text-gray-900 mb-2">Verificando sesión...</h2>
+          <p class="text-gray-600">Un momento por favor</p>
+        </.ui_card_content>
+      </.ui_card>
+    </.ui_container>
+  <% else %>
+    <%= if !@joined or is_nil(@name) do %>
+      <!-- Join Form -->
+      <.ui_container class="min-h-screen justify-center">
+        <.ui_card>
+          <.ui_card_content class="text-center py-12">
+            <h1 class="text-4xl font-bold text-gray-900 mb-6">
+              Indies Shuffle
+            </h1>
+            
+            <.form for={%{}} phx-submit="set_name" class="space-y-4">
+              <input type="hidden" name="token" value={@token || ""} />
+              <.ui_input 
+                name="name"
+                placeholder="Tu nombre o handle"
+                value={@name || ""}
+                autocomplete="off"
+                maxlength={40}
+                required
+              />
+              <.ui_button type="submit" class="w-full">
+                Unirse al Lobby
+              </.ui_button>
+            </.form>
+            
+            <%= if @indie_id do %>
+              <.ui_badge variant="info" class="mt-4">
+                ID: <%= @indie_id %>
+              </.ui_badge>
+            <% end %>
+          </.ui_card_content>
+        </.ui_card>
+      </.ui_container>
+    <% else %>
+      <!-- Lobby -->
+      <.ui_container class="min-h-screen py-8">
+        <!-- User Status Card -->
+        <.ui_card>
+          <.ui_card_content>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <.ui_avatar name={@name} />
+                <div>
+                  <h3 class="font-semibold text-gray-900"><%= @name %></h3>
+                  <.ui_badge variant="success">En línea</.ui_badge>
+                </div>
+              </div>
+              <%= if !@editing do %>
+                <div class="flex space-x-2">
+                  <.ui_button 
+                    variant="outline" 
+                    phx-click="edit_name"
+                  >
+                    <.icon name="hero-pencil" class="w-4 h-4" />
+                    Editar
+                  </.ui_button>
+                  <.ui_button 
+                    variant="danger" 
+                    phx-click="show_logout_modal"
+                  >
+                    <.icon name="hero-arrow-right-end-on-rectangle" class="w-4 h-4" />
+                    Salir
+                  </.ui_button>
+                </div>
+              <% else %>
+                <.form for={%{}} phx-submit="set_name" class="flex space-x-2 items-center">
+                  <input type="hidden" name="token" value={@token} />
+                  <.ui_input 
+                    name="name"
+                    value={@name}
+                    class="flex-1"
+                    autocomplete="off"
+                    maxlength={40}
+                    required
+                  />
+                  <.ui_button type="submit" variant="primary">
+                    <.icon name="hero-check" class="w-4 h-4" />
+                  </.ui_button>
+                  <.ui_button 
+                    type="button" 
+                    variant="outline" 
+                    phx-click="cancel_edit"
+                  >
+                    <.icon name="hero-x-mark" class="w-4 h-4" />
+                  </.ui_button>
+                </.form>
+              <% end %>
+            </div>
+          </.ui_card_content>
+        </.ui_card>
+
+        <!-- Game Status Card -->
+        <.ui_card>
+          <.ui_card_content>
+            <div class="text-center">
+              <h2 class="text-2xl font-bold text-gray-900 mb-4">Estado del Lobby</h2>
+              
+              <%= case @game_state do %>
+                <% :waiting -> %>
+                  <div class="mb-4">
+                    <span class="text-4xl mb-4 block">⏳</span>
+                    <p class="text-lg text-gray-600 mb-2">Esperando más jugadores</p>
+                    <p class="text-sm text-gray-500">
+                      Se necesitan <%= @players_needed %> jugador<%= if @players_needed != 1, do: "es" %> más para comenzar
+                    </p>
+                  </div>
+                <% :ready -> %>
+                  <div class="mb-4">
+                    <span class="text-4xl mb-4 block">✅</span>
+                    <p class="text-lg text-green-600 mb-2">¡Listo para comenzar!</p>
+                    <p class="text-sm text-gray-500">Hay suficientes jugadores para empezar el juego</p>
+                  </div>
+                  
+                  <%= if @can_start_game do %>
+                    <.ui_button variant="primary" class="w-full" phx-click="start_game">
+                      <.icon name="hero-play" class="w-4 h-4" />
+                      Comenzar Juego
+                    </.ui_button>
+                  <% end %>
+                <% :full -> %>
+                  <div class="mb-4">
+                    <span class="text-4xl mb-4 block">🚫</span>
+                    <p class="text-lg text-red-600 mb-2">Lobby lleno</p>
+                    <p class="text-sm text-gray-500">El máximo de jugadores ha sido alcanzado</p>
+                  </div>
+              <% end %>
+            </div>
+          </.ui_card_content>
+        </.ui_card>
+
+        <!-- Players List Card -->
+        <.ui_card>
+          <.ui_card_content>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+              Jugadores Conectados (<%= length(@players) %>)
+            </h3>
+            
+            <%= if @players != [] do %>
+              <div class="space-y-3">
+                <div class="grid gap-3">
+                  <%= for %{indie_id: id, name: name} <- @players do %>
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div class="flex items-center space-x-3">
+                        <.ui_avatar name={name || "?"} size="sm" />
+                        <span class="font-medium text-gray-900">
+                          <%= name || "Usuario sin nombre" %>
+                        </span>
+                      </div>
+                      <%= if id == @indie_id do %>
+                        <.ui_badge variant="success">Tú</.ui_badge>
+                      <% else %>
+                        <div class="w-2 h-2 bg-orange-500 rounded-full"></div>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            <% else %>
+              <div class="text-center py-8 text-gray-500">
+                <span class="text-4xl mb-4 block">👻</span>
+                <p>No hay otros jugadores conectados</p>
+                <p class="text-sm mt-2">¡Comparte el enlace para que se unan más personas!</p>
+              </div>
+            <% end %>
+          </.ui_card_content>
+        </.ui_card>
+      </.ui_container>
+    <% end %>
+  <% end %>
+
+  <!-- Logout Confirmation Modal -->
+  <%= if @show_logout_modal do %>
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <.ui_card class="max-w-md">
+        <.ui_card_content class="text-center p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">¿Cerrar sesión?</h3>
+          <p class="text-gray-600 mb-6">¿Estás seguro de que quieres salir del lobby?</p>
+          
+          <div class="flex space-x-3 justify-center">
+            <.ui_button 
+              variant="outline" 
+              phx-click="hide_logout_modal"
+            >
+              Cancelar
+            </.ui_button>
+            <.ui_button 
+              variant="danger" 
+              phx-click="confirm_logout"
+            >
+              <.icon name="hero-arrow-right-end-on-rectangle" class="w-4 h-4" />
+              Salir
+            </.ui_button>
+          </div>
+        </.ui_card_content>
+      </.ui_card>
+    </div>
+  <% end %>
+  </div>
+</div>

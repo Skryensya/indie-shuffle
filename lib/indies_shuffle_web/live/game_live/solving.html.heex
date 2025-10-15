@@ -1,0 +1,201 @@
+<div class="max-w-6xl mx-auto p-6">
+  <div class="bg-white rounded-lg shadow-lg p-8">
+    <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">🧩 Solve the Puzzle</h2>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <!-- Left Column: Rules and Team Info -->
+      <div>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+          <h3 class="text-xl font-semibold text-blue-800 mb-4">
+            <%= @player_info.group_emoji %> Your Team's Clues
+          </h3>
+          
+          <%= if length(@my_rules) > 0 do %>
+            <div class="space-y-3">
+              <%= for {rule, index} <- Enum.with_index(@my_rules) do %>
+                <div class="bg-white rounded-lg p-4 border border-blue-100">
+                  <div class="flex items-start">
+                    <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full mr-3 mt-1">
+                      Clue <%= index + 1 %>
+                    </span>
+                    <p class="text-gray-700 font-medium"><%= rule.text %></p>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <p class="text-blue-700">Loading your clues...</p>
+          <% end %>
+        </div>
+        
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <h4 class="font-semibold text-yellow-800 mb-2">🎯 Your Mission</h4>
+          <p class="text-yellow-700 text-sm">
+            Work with your team to find the correct combination of <strong>Figure + Color + Style</strong>.
+            Each team member has different clues. Share your clues and work together!
+          </p>
+        </div>
+        
+        <!-- Team Members -->
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <h4 class="font-semibold text-gray-700 mb-3">👥 Team Members</h4>
+          <div class="space-y-2">
+            <%= for member <- @player_info.group_members do %>
+              <div class="flex items-center justify-between">
+                <span class="text-sm"><%= member.name %></span>
+                <%= if member.indie_id == @player_info.player_id do %>
+                  <span class="text-xs text-blue-600">(You)</span>
+                <% end %>
+                <%= if @player_info.is_leader and member.indie_id == @player_info.player_id do %>
+                  <span class="text-xs text-yellow-600">👑</span>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Right Column: Answer Selection -->
+      <div>
+        <div class="bg-green-50 border border-green-200 rounded-lg p-6">
+          <h3 class="text-xl font-semibold text-green-800 mb-4">🎯 Select Your Answer</h3>
+          
+          <!-- Current Selection Display -->
+          <div class="text-center mb-6">
+            <div class="bg-white rounded-lg p-6 border border-green-100">
+              <h4 class="text-lg font-medium text-gray-700 mb-4">Current Selection</h4>
+              <div class="flex justify-center items-center space-x-4 text-6xl mb-4">
+                <%= if @selected_combination.figure do %>
+                  <span class={"#{get_color_class(@selected_combination.color)} #{get_style_class(@selected_combination.style)}"}>
+                    <%= get_figure_emoji(@selected_combination.figure) %>
+                  </span>
+                <% else %>
+                  <span class="text-gray-300">?</span>
+                <% end %>
+              </div>
+              <div class="text-sm text-gray-600">
+                Figure: <%= @selected_combination.figure || "?" %> • 
+                Color: <%= @selected_combination.color || "?" %> • 
+                Style: <%= @selected_combination.style || "?" %>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Selection Controls -->
+          <form phx-submit="submit_answer" class="space-y-6">
+            <!-- Figure Selection -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Figure</label>
+              <div class="grid grid-cols-3 gap-2">
+                <%= for figure <- [:circle, :square, :triangle, :diamond, :star, :hexagon] do %>
+                  <button
+                    type="button"
+                    phx-click="select_figure"
+                    phx-value-figure={figure}
+                    class={[
+                      "p-3 rounded-lg border text-2xl transition-colors",
+                      if(@selected_combination.figure == figure, 
+                         do: "bg-green-100 border-green-300 text-green-700", 
+                         else: "bg-gray-50 border-gray-200 hover:bg-gray-100")
+                    ]}
+                  >
+                    <%= get_figure_emoji(figure) %>
+                  </button>
+                <% end %>
+              </div>
+            </div>
+            
+            <!-- Color Selection -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Color</label>
+              <div class="grid grid-cols-3 gap-2">
+                <%= for color <- [:red, :blue, :green, :yellow, :purple, :orange] do %>
+                  <button
+                    type="button"
+                    phx-click="select_color"
+                    phx-value-color={color}
+                    class={[
+                      "p-3 rounded-lg border text-sm font-medium transition-colors",
+                      get_color_class(color),
+                      if(@selected_combination.color == color, 
+                         do: "ring-2 ring-offset-2 ring-gray-400", 
+                         else: "hover:opacity-80")
+                    ]}
+                  >
+                    <%= String.capitalize(to_string(color)) %>
+                  </button>
+                <% end %>
+              </div>
+            </div>
+            
+            <!-- Style Selection -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Style</label>
+              <div class="grid grid-cols-3 gap-2">
+                <%= for style <- [:filled, :outline, :dashed] do %>
+                  <button
+                    type="button"
+                    phx-click="select_style"
+                    phx-value-style={style}
+                    class={[
+                      "p-3 rounded-lg border text-sm font-medium transition-colors",
+                      if(@selected_combination.style == style, 
+                         do: "bg-green-100 border-green-300 text-green-700", 
+                         else: "bg-gray-50 border-gray-200 hover:bg-gray-100")
+                    ]}
+                  >
+                    <%= String.capitalize(to_string(style)) %>
+                  </button>
+                <% end %>
+              </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex space-x-3">
+              <%= if @player_info.is_leader do %>
+                <button
+                  type="submit"
+                  disabled={not combination_complete?(@selected_combination) or @submission_status}
+                  class={[
+                    "flex-1 py-3 px-4 rounded-lg font-medium transition-colors",
+                    if(combination_complete?(@selected_combination) and not @submission_status,
+                       do: "bg-green-600 hover:bg-green-700 text-white",
+                       else: "bg-gray-300 text-gray-500 cursor-not-allowed")
+                  ]}
+                >
+                  <%= if @submission_status do %>
+                    <%= if @submission_status == :correct do %>
+                      ✅ Correct!
+                    <% else %>
+                      ❌ Incorrect
+                    <% end %>
+                  <% else %>
+                    Submit Answer
+                  <% end %>
+                </button>
+              <% else %>
+                <div class="flex-1 py-3 px-4 rounded-lg bg-yellow-100 border border-yellow-300 text-yellow-800 text-center font-medium">
+                  👑 Waiting for leader to submit
+                </div>
+              <% end %>
+              
+              <button
+                type="button"
+                phx-click="reset_combination"
+                class="px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </form>
+          
+          <%= if @error_message do %>
+            <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <%= @error_message %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

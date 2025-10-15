@@ -1,0 +1,42 @@
+# 🧱 Base image with Elixir + Erlang + Node
+FROM elixir:1.15-slim
+
+# 🧩 Set working dir
+WORKDIR /app
+
+# ⚙️ Install system dependencies
+RUN apt-get update && apt-get install -y \
+  build-essential \
+  git \
+  inotify-tools \
+  curl \
+  watchman \
+  && rm -rf /var/lib/apt/lists/*
+
+# 🧰 Install Hex + Rebar
+RUN mix local.hex --force && mix local.rebar --force
+
+# 📦 Install Node.js (for assets)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+  apt-get install -y nodejs && \
+  npm install -g npm@latest && \
+  rm -rf /var/lib/apt/lists/*
+
+# 🔒 Cache dependencies first
+COPY mix.exs mix.lock ./
+RUN mix deps.get
+
+# 🧩 Copy rest of app
+COPY . .
+
+# 🔄 Update deps to handle git dependencies correctly
+RUN mix deps.update --all || true
+
+# 🔧 Setup and compile assets
+RUN mix setup
+
+# 🌐 Expose Phoenix port
+EXPOSE 4000
+
+# 🏁 Default command - always update deps then start server
+CMD ["sh", "-c", "mix deps.get && mix phx.server"]

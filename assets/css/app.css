@@ -1,0 +1,30 @@
+/* See the Tailwind configuration guide for advanced usage
+   https://tailwindcss.com/docs/configuration */
+
+@import "tailwindcss" source(none);
+@source "../css";
+@source "../js";
+@source "../../lib/indies_shuffle_web";
+
+/* Import heroicons CSS classes */
+@import "./heroicons.css";
+
+/* Custom styles for Indies Shuffle */
+
+/* Remove all search bar background and UI when hiding elements */
+.searchbar-hidden,
+.topbar-hidden { 
+  opacity: 0; 
+  position: absolute; 
+  top: -9999px; 
+  z-index: -1; 
+}
+
+/* Improve the style when items are shown */
+.searchbar-visible,
+.topbar-visible { 
+  opacity: 1; 
+  position: relative; 
+  top: auto; 
+  z-index: auto; 
+}
