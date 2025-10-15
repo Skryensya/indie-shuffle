@@ -1,302 +1,284 @@
 # IndiesShuffle
 
-A modern web application built with Phoenix LiveView, featuring a Docker-based development environment for streamlined setup and deployment.
+Un juego interactivo diseñado para que personas introvertidas cooperen con desconocidos y resuelvan acertijos compartidos — construido con Phoenix.
 
-## 🚀 Quick Start
+## 🚀 Inicio Rápido
 
-### Prerequisites
+### Requisitos Previos
 
-* [Docker Desktop](https://docs.docker.com/get-docker/) - Required for containerized development
-* [Docker Compose](https://docs.docker.com/compose/install/) - Usually included with Docker Desktop
+* [Docker Desktop](https://docs.docker.com/get-docker/) - Requerido para el entorno de desarrollo
 
-### Getting Started
+### Puesta en Marcha
 
-1. **Clone the repository**
+1. **Clona el repositorio**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/Skryensya/indie-shuffle.git
    cd indies_shuffle
    ```
 
-2. **Set up environment variables**
+2. **Configura las variables de entorno**
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration values
+   # Edita .env con tus valores de configuración
    ```
 
-3. **Start the application**
+3. **Inicia la aplicación**
    ```bash
    docker compose up
    ```
 
-4. **Access the application**
+4. **Accede a la aplicación**
    
-   Open your browser and navigate to [`http://localhost:4000`](http://localhost:4000)
+   Abre tu navegador y ve a [`http://localhost:4000`](http://localhost:4000)
 
-That's it! The Docker container will automatically:
-- Install all Elixir dependencies
-- Install Node.js dependencies for assets
-- Compile assets (Tailwind CSS + esbuild)
-- Start the Phoenix server with hot reloading
+¡Eso es todo! El contenedor Docker automáticamente:
+- Instalará todas las dependencias de Elixir
+- Instalará las dependencias de Node.js para los assets
+- Compilará los assets (Tailwind CSS + esbuild)
+- Iniciará el servidor Phoenix con hot reloading
 
-## 🐳 Docker Development
+## �️ Desarrollo con Docker
 
-### Container Architecture
-
-The project uses a single-service Docker setup:
-- **Base Image:** `elixir:1.15-slim`
-- **System Dependencies:** build-essential, git, inotify-tools, Node.js 20, watchman
-- **Volumes:** Source code, dependencies, and build artifacts are persisted
-- **Hot Reloading:** Enabled via file system watchers
-
-### Common Docker Commands
+### Comandos Comunes
 
 ```bash
-# Start in foreground (see logs)
+# Iniciar en primer plano (ver logs)
 docker compose up
 
-# Start in background
+# Iniciar en segundo plano
 docker compose up -d
 
-# Rebuild after Dockerfile changes
+# Reconstruir después de cambios en Dockerfile
 docker compose up --build
 
-# Stop the application
+# Detener la aplicación
 docker compose down
 
-# View logs
+# Ver logs en tiempo real
 docker compose logs -f web
 
-# Run mix commands inside container
+# Ejecutar comandos mix dentro del contenedor
 docker compose exec web mix deps.get
 docker compose exec web mix test
 docker compose exec web mix format
 
-# Start an interactive Elixir shell
+# Iniciar una consola interactiva de Elixir
 docker compose exec web iex -S mix
 
-# Access container shell
+# Acceder al shell del contenedor
 docker compose exec web bash
 ```
 
-### Working with Dependencies
+### Trabajar con Dependencias
 
-When you add new dependencies to `mix.exs`:
+Cuando agregues nuevas dependencias a `mix.exs`:
 
 ```bash
-# The container auto-updates on restart, or manually run:
+# El contenedor se actualiza automáticamente al reiniciar, o manualmente ejecuta:
 docker compose exec web mix deps.get
 docker compose exec web mix deps.compile
 ```
 
-## 💻 Local Development (Alternative)
+## 💻 Desarrollo Local (Alternativa)
 
-If you prefer to run the application locally without Docker:
+Si prefieres ejecutar la aplicación localmente sin Docker:
 
-### Prerequisites
-* **Elixir** 1.15+ with Erlang/OTP 24+
-* **Node.js** 20+ and npm
-* **PostgreSQL** 14+ (if using a database)
+### Requisitos
+* **Elixir** 1.15+ con Erlang/OTP 24+
+* **Node.js** 20+ y npm
 
-### Setup
+### Configuración
 
 ```bash
-# Install dependencies
+# Instalar dependencias
 mix setup
 
-# Start Phoenix server
+# Iniciar el servidor Phoenix
 mix phx.server
 
-# Or start with interactive Elixir shell
+# O iniciar con consola interactiva de Elixir
 iex -S mix phx.server
 ```
 
-Visit [`localhost:4000`](http://localhost:4000) in your browser.
+Visita [`localhost:4000`](http://localhost:4000) en tu navegador.
 
-## 🛠️ Development Workflow
+## 🎯 Flujo de Trabajo de Desarrollo
 
-### Mix Aliases
+### Alias de Mix
 
-The project includes helpful Mix aliases defined in `mix.exs`:
+El proyecto incluye alias útiles de Mix definidos en `mix.exs`:
 
 ```bash
-# Project setup
-mix setup              # Install all dependencies and setup project
-mix assets.setup       # Install Tailwind and esbuild
-mix assets.build       # Compile assets
-mix assets.deploy      # Build minified assets for production
+# Configuración del proyecto
+mix setup              # Instalar todas las dependencias y configurar el proyecto
+mix assets.setup       # Instalar Tailwind y esbuild
+mix assets.build       # Compilar assets
+mix assets.deploy      # Construir assets minificados para producción
 
-# Development
-mix dev.server         # Start Phoenix server (alias for mix phx.server)
-mix dev.test           # Run tests in watch mode
-mix dev.format         # Format code
+# Desarrollo
+mix dev.server         # Iniciar servidor Phoenix (alias de mix phx.server)
+mix dev.test           # Ejecutar tests en modo watch
+mix dev.format         # Formatear código
 
-# Quality checks
-mix precommit          # Run before committing (compile with warnings, format, test)
-mix quality            # Quick quality check (format + test)
-mix ci                 # Full CI pipeline (used in continuous integration)
+# Control de calidad
+mix precommit          # Ejecutar antes de hacer commit (compilar con warnings, formatear, test)
+mix quality            # Chequeo rápido de calidad (formatear + test)
+mix ci                 # Pipeline completo de CI
 ```
 
-### Pre-commit Checklist
+### Lista de Verificación Pre-commit
 
-Before committing code, run:
+Antes de hacer commit de código, ejecuta:
 
 ```bash
 mix precommit
 ```
 
-This will:
-1. Compile with warnings as errors
-2. Remove unused dependencies
-3. Format all code
-4. Run the test suite
+Esto:
+1. Compilará con warnings como errores
+2. Eliminará dependencias no utilizadas
+3. Formateará todo el código
+4. Ejecutará la suite de tests
 
-### Code Formatting
+### Formateo de Código
 
-The project uses Elixir's built-in formatter:
+El proyecto usa el formateador integrado de Elixir:
 
 ```bash
-# Format all files
+# Formatear todos los archivos
 mix format
 
-# Check if files are formatted (CI mode)
+# Verificar si los archivos están formateados (modo CI)
 mix format --check-formatted
 ```
 
-## 🏗️ Project Structure
+## 🏗️ Estructura del Proyecto
 
 ```
 indies_shuffle/
-├── assets/              # Frontend assets
-│   ├── css/            # Stylesheets (Tailwind CSS v4)
+├── assets/              # Assets del frontend
+│   ├── css/            # Hojas de estilo (Tailwind CSS v4)
 │   ├── js/             # JavaScript (esbuild)
-│   └── vendor/         # Third-party assets (Heroicons)
-├── config/             # Application configuration
-│   ├── config.exs      # Base configuration
-│   ├── dev.exs         # Development config
-│   ├── prod.exs        # Production config
-│   ├── runtime.exs     # Runtime configuration
-│   └── test.exs        # Test environment config
+│   └── vendor/         # Assets de terceros (Heroicons)
+├── config/             # Configuración de la aplicación
+│   ├── config.exs      # Configuración base
+│   ├── dev.exs         # Configuración de desarrollo
+│   ├── prod.exs        # Configuración de producción
+│   ├── runtime.exs     # Configuración de runtime
+│   └── test.exs        # Configuración del entorno de test
 ├── lib/
-│   ├── indies_shuffle/        # Core application logic
-│   └── indies_shuffle_web/    # Web layer (LiveView, controllers, etc)
-├── priv/               # Static assets and gettext translations
-├── test/               # Test files
-├── docker-compose.yml  # Docker orchestration
-├── Dockerfile.dev      # Development Docker image
-└── mix.exs            # Project configuration and dependencies
+│   ├── indies_shuffle/        # Lógica central de la aplicación
+│   └── indies_shuffle_web/    # Capa web (LiveView, controllers, etc)
+├── priv/               # Assets estáticos y traducciones gettext
+├── test/               # Archivos de test
+├── docker-compose.yml  # Orquestación Docker
+├── Dockerfile.dev      # Imagen Docker de desarrollo
+└── mix.exs            # Configuración del proyecto y dependencias
 ```
 
-## 📦 Key Dependencies
+## 📦 Dependencias Principales
 
 ### Framework & Core
-- **Phoenix** 1.8.1 - Web framework
-- **Phoenix LiveView** 1.1.0 - Real-time UI updates
-- **Bandit** 1.5+ - HTTP server
+- **Phoenix** 1.8.1 - Framework web
+- **Phoenix LiveView** 1.1.0 - Actualizaciones de UI en tiempo real
+- **Bandit** 1.5+ - Servidor HTTP
 
 ### Frontend
-- **Tailwind CSS** 0.3+ - Utility-first CSS framework (v4)
-- **esbuild** 0.10+ - JavaScript bundler
-- **Heroicons** v2.2.0 - Beautiful hand-crafted SVG icons
+- **Tailwind CSS** 0.3+ - Framework CSS utility-first (v4)
+- **esbuild** 0.10+ - Bundler de JavaScript
+- **Heroicons** v2.2.0 - Iconos SVG hermosos y hechos a mano
 
 ### HTTP & API
-- **Req** 0.5+ - HTTP client for external API calls
-- **Joken** 2.6+ - JWT token handling
+- **Req** 0.5+ - Cliente HTTP para llamadas a APIs externas
+- **Joken** 2.6+ - Manejo de tokens JWT
 
-### Development Tools
-- **Phoenix Live Dashboard** 0.8.3+ - Development metrics and insights
-- **Phoenix Live Reload** 1.2+ - Hot reloading for templates and assets
+### Herramientas de Desarrollo
+- **Phoenix Live Dashboard** 0.8.3+ - Métricas e insights de desarrollo
+- **Phoenix Live Reload** 1.2+ - Hot reloading para templates y assets
 
 ## 🧪 Testing
 
 ```bash
-# Run all tests
+# Ejecutar todos los tests
 mix test
 
-# Run tests in watch mode (auto-rerun on file changes)
+# Ejecutar tests en modo watch (auto-reejecutar al cambiar archivos)
 mix dev.test
 
-# Run specific test file
+# Ejecutar archivo de test específico
 mix test test/indies_shuffle_web/live/some_live_test.exs
 
-# Run tests with coverage
+# Ejecutar tests con cobertura
 mix test --cover
 ```
 
-In Docker:
+En Docker:
 ```bash
 docker compose exec web mix test
 ```
 
-## 🔐 Environment Variables
+## 🔐 Variables de Entorno
 
-Key environment variables (see `.env.example`):
+Variables de entorno clave (ver `.env.example`):
 
 ```bash
-# Phoenix Configuration
-PHX_HOST=localhost              # Host for the Phoenix server
-PHX_PORT=4000                   # Port for the Phoenix server
-SECRET_KEY_BASE=<secret>        # Secret key for sessions/cookies
-
-# Environment
-MIX_ENV=dev                     # Elixir environment (dev/test/prod)
-
-# Admin Panel (if applicable)
-ADMIN_USERNAME=<username>       # Admin credentials
-ADMIN_PASSWORD=<password>       # Admin credentials
+# Admin Panel
+ADMIN_USERNAME=admin            # Usuario administrador
+ADMIN_PASSWORD=admin123         # Contraseña administrador
 ```
 
-## 📝 Code Guidelines
+## 📝 Guías de Código
 
-This project follows Phoenix and Elixir best practices. Key points:
+Este proyecto sigue las mejores prácticas de Phoenix y Elixir. Puntos clave:
 
-- Use LiveView for interactive features
-- Follow the guidelines in `AGENTS.md` for AI-assisted development
-- Use `<.form>` and `to_form/2` for all form handling
-- Leverage Tailwind CSS classes (no `@apply`)
-- Use the built-in `<.icon>` component for Heroicons
-- Run `mix precommit` before pushing changes
+- Usa LiveView para funcionalidades interactivas
+- Sigue las guías en `AGENTS.md` para desarrollo asistido por IA
+- Usa `<.form>` y `to_form/2` para todo el manejo de formularios
+- Aprovecha las clases de Tailwind CSS (sin `@apply`)
+- Usa el componente `<.icon>` integrado para Heroicons
+- Ejecuta `mix precommit` antes de hacer push de cambios
 
-## 🚢 Deployment
+## 🚢 Despliegue
 
-For production deployment:
+Para despliegue en producción:
 
 ```bash
-# Build production assets
+# Construir assets de producción
 mix assets.deploy
 
-# Start in production mode
+# Iniciar en modo producción
 MIX_ENV=prod mix phx.server
 ```
 
-Consult the [Phoenix deployment guides](https://hexdocs.pm/phoenix/deployment.html) for platform-specific instructions.
+Consulta las [guías de despliegue de Phoenix](https://hexdocs.pm/phoenix/deployment.html) para instrucciones específicas de cada plataforma.
 
-## 📚 Learn More
+## 📚 Aprende Más
 
 ### Phoenix Framework
-* [Official Website](https://www.phoenixframework.org/)
-* [Guides](https://hexdocs.pm/phoenix/overview.html)
-* [Documentation](https://hexdocs.pm/phoenix)
-* [Forum](https://elixirforum.com/c/phoenix-forum)
-* [Source Code](https://github.com/phoenixframework/phoenix)
+* [Sitio Oficial](https://www.phoenixframework.org/)
+* [Guías](https://hexdocs.pm/phoenix/overview.html)
+* [Documentación](https://hexdocs.pm/phoenix)
+* [Foro](https://elixirforum.com/c/phoenix-forum)
+* [Código Fuente](https://github.com/phoenixframework/phoenix)
 
 ### LiveView
-* [LiveView Documentation](https://hexdocs.pm/phoenix_live_view)
-* [LiveView Examples](https://github.com/phoenixframework/phoenix_live_view/tree/master/lib/phoenix_live_view)
+* [Documentación de LiveView](https://hexdocs.pm/phoenix_live_view)
+* [Ejemplos de LiveView](https://github.com/phoenixframework/phoenix_live_view/tree/master/lib/phoenix_live_view)
 
 ### Tailwind CSS
-* [Tailwind v4 Documentation](https://tailwindcss.com/docs)
+* [Documentación de Tailwind v4](https://tailwindcss.com/docs)
 * [Tailwind Play](https://play.tailwindcss.com/)
 
-## 🤝 Contributing
+## 🤝 Contribuir
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run `mix precommit` to ensure code quality
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+1. Haz un fork del repositorio
+2. Crea una rama de feature (`git checkout -b feature/amazing-feature`)
+3. Haz tus cambios
+4. Ejecuta `mix precommit` para asegurar la calidad del código
+5. Haz commit de tus cambios (`git commit -m 'Add amazing feature'`)
+6. Haz push a la rama (`git push origin feature/amazing-feature`)
+7. Abre un Pull Request
 
-## 📄 License
+## 📄 Licencia
 
-[Add your license here]
+Este proyecto está licenciado bajo la Licencia MIT - consulta el archivo [LICENSE](LICENSE) para más detalles.
