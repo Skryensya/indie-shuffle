@@ -1,5 +1,5 @@
 <div class="max-w-4xl mx-auto p-6">
-  <div class="bg-white rounded-lg shadow-lg p-8">
+  <div class=" rounded-lg shadow-lg p-8">
     <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">🕵️ Find Your Team</h2>
     
     <%= if @player_info.group_id do %>
@@ -11,18 +11,33 @@
           <h4 class="font-semibold text-lg mb-3">Team Members:</h4>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <%= for member <- @player_info.group_members do %>
-              <div class="flex items-center justify-between bg-white rounded-lg p-3 shadow-sm">
-                <span class="font-medium"><%= member.name %></span>
-                <%= if member.indie_id == @player_info.player_id do %>
-                  <span class="text-blue-600 font-semibold">(You)</span>
-                <% end %>
-                <%= if @player_info.is_leader and member.indie_id == @player_info.player_id do %>
-                  <span class="text-yellow-600 font-semibold">👑 Leader</span>
-                <% else %>
-                  <%= if member.indie_id == (@player_info.group_members |> Enum.find(&(&1.indie_id == @player_info.leader_id), %{}) |> Map.get(:indie_id)) do %>
-                    <span class="text-yellow-600 font-semibold">👑</span>
+              <div class=" rounded-lg p-3 shadow-sm">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="font-medium"><%= member.name %></span>
+                  <%= if member.indie_id == @player_info.player_id do %>
+                    <span class="text-blue-600 font-semibold text-sm">(Tú)</span>
                   <% end %>
-                <% end %>
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                  <%= case Map.get(member, :role) do %>
+                    <% :decoder -> %>
+                      <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-semibold">
+                        🔑 Descifrador
+                      </span>
+                    <% :code_holder -> %>
+                      <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded font-semibold">
+                        📜 Guardián del Código
+                      </span>
+                    <% :solver -> %>
+                      <span class="bg-green-100 text-green-800 px-2 py-1 rounded font-semibold">
+                        🧩 Solucionador
+                      </span>
+                    <% _ -> %>
+                      <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded">
+                        Jugador
+                      </span>
+                  <% end %>
+                </div>
               </div>
             <% end %>
           </div>
@@ -31,15 +46,21 @@
         <%= if @player_info.is_leader do %>
           <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <p class="text-yellow-800 font-semibold">
-              👑 You are the team leader! You'll be responsible for submitting the final answer.
+              🔑 ¡Eres el Descifrador! Serás el único que puede enviar la respuesta final una vez que tu equipo haya resuelto el puzzle.
             </p>
           </div>
         <% end %>
-        
+
         <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <p class="text-gray-700">
-            Get to know your teammates! In the next phase, you'll work together to solve a puzzle.
-            Each team member will have different clues, so communication is key!
+          <h4 class="font-semibold text-gray-800 mb-2">🎯 Cómo jugar:</h4>
+          <ul class="text-gray-700 space-y-2 text-left">
+            <li><strong>🧩 Solucionadores:</strong> Tienen pistas para resolver el puzzle</li>
+            <li><strong>📜 Guardián del Código:</strong> Tiene información especial sobre el código secreto</li>
+            <li><strong>🔑 Descifrador:</strong> Es el único que puede enviar la respuesta final</li>
+          </ul>
+          <p class="text-gray-700 mt-3">
+            ¡Conozcan a sus compañeros de equipo! En la siguiente fase, trabajarán juntos para resolver el puzzle.
+            Cada miembro tiene información diferente, ¡así que la comunicación es clave!
           </p>
         </div>
       </div>

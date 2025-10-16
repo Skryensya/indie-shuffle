@@ -4,11 +4,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    env_file:
+      - .env
     environment:
       MIX_ENV: dev
       PHX_HOST: localhost
       PHX_PORT: 4000
       SECRET_KEY_BASE: "your-secret-key-base-here-change-in-production"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     ports:
       - "4000:4000"
     volumes:

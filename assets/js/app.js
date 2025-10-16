@@ -42,10 +42,45 @@ function getCookie(name) {
 
 // Hooks personalizados
 const hooks = {
+  FindingTimer: {
+    mounted() {
+      console.log("⏱️ FindingTimer montado");
+      // Duración en segundos (20 segundos)
+      const FINDING_DURATION = 20;
+      let timeLeft = FINDING_DURATION;
+
+      // Actualizar el timer cada segundo
+      const interval = setInterval(() => {
+        timeLeft--;
+
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          this.el.textContent = "0";
+          console.log("⏱️ Timer completado");
+        } else {
+          this.el.textContent = timeLeft;
+        }
+
+        // Cambiar color cuando queden menos de 10 segundos
+        if (timeLeft <= 10) {
+          this.el.classList.remove("text-orange-600");
+          this.el.classList.add("text-red-600");
+        }
+      }, 1000);
+
+      // Limpiar el interval cuando el componente se desmonte
+      this.handleEvent = () => {};
+      this.destroyed = () => {
+        clearInterval(interval);
+        console.log("⏱️ FindingTimer desmontado");
+      };
+    }
+  },
+
   GameAuthChecker: {
     mounted() {
       console.log("🎮 GameAuthChecker montado, verificando acceso al juego...");
-      
+
       // Generar o recuperar indie_id persistente
       let indieId = localStorage.getItem("persistent_indie_id");
       if (!indieId) {
@@ -56,7 +91,7 @@ const hooks = {
       } else {
         console.log("🆔 Indie_id recuperado para juego:", indieId);
       }
-      
+
       // Enviar indie_id al servidor para inicializar el juego
       this.pushEvent("init_indie_id", { indie_id: indieId });
     }
@@ -125,6 +160,14 @@ const liveSocket = new LiveSocket("/live", Socket, {
     }
   },
   hooks: {...colocatedHooks, ...hooks},
+  // Configuración de reconexión automática
+  reconnectAfterMs: (tries) => {
+    // Backoff exponencial: 100ms, 500ms, 1s, 2s, 5s, luego 10s
+    if (tries < 3) return [100, 500, 1000][tries];
+    if (tries < 5) return [2000, 5000][tries - 3];
+    return 10000; // Máximo 10 segundos
+  },
+  timeout: 20000, // 20 segundos de timeout
 })
 
 // connect if there are any LiveViews on the page
@@ -135,6 +178,107 @@ liveSocket.connect()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
+
+// === Indicador de Conexión ===
+// Crear el indicador de conexión
+function createConnectionIndicator() {
+  const indicator = document.createElement('div');
+  indicator.id = 'connection-indicator';
+  indicator.style.cssText = `
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #10b981;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    z-index: 9999;
+    transition: all 0.3s ease;
+  `;
+  indicator.title = 'Conectado';
+  document.body.appendChild(indicator);
+  return indicator;
+}
+
+function setConnectionStatus(connected) {
+  let indicator = document.getElementById('connection-indicator');
+  if (!indicator) {
+    indicator = createConnectionIndicator();
+  }
+
+  if (connected) {
+    indicator.style.backgroundColor = '#10b981'; // green-500
+    indicator.style.boxShadow = '0 0 0 0 rgba(16, 185, 129, 0.7)';
+    indicator.title = 'Conectado';
+    // Animación de pulso cuando se conecta
+    indicator.style.animation = 'none';
+    setTimeout(() => {
+      indicator.style.animation = 'pulse-once 0.5s ease-out';
+    }, 10);
+  } else {
+    indicator.style.backgroundColor = '#ef4444'; // red-500
+    indicator.style.boxShadow = '0 0 8px rgba(239, 68, 68, 0.6)';
+    indicator.style.animation = 'pulse-continuous 2s infinite';
+    indicator.title = 'Desconectado - Reconectando...';
+  }
+}
+
+// Estilos de animación
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes pulse-once {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+  }
+
+  @keyframes pulse-continuous {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    }
+  }
+`;
+document.head.appendChild(style);
+
+// Escuchar eventos de conexión/desconexión
+window.addEventListener("phx:page-loading-start", () => {
+  console.log("🔄 Cargando página...");
+});
+
+window.addEventListener("phx:page-loading-stop", () => {
+  console.log("✅ Página cargada");
+  setConnectionStatus(true);
+});
+
+// Detectar cambios en el estado de conexión del socket
+liveSocket.onOpen(() => {
+  console.log("🟢 WebSocket conectado");
+  setConnectionStatus(true);
+});
+
+liveSocket.onError(() => {
+  console.log("🔴 WebSocket error");
+  setConnectionStatus(false);
+});
+
+liveSocket.onClose(() => {
+  console.log("🔴 WebSocket desconectado");
+  setConnectionStatus(false);
+});
+
+// Crear indicador al cargar la página
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', createConnectionIndicator);
+} else {
+  createConnectionIndicator();
+}
 
 // Eventos para JWT
 const maxAge = 60 * 60 * 6; // 6 horas

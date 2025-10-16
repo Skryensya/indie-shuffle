@@ -1,0 +1,124 @@
+<div class="fixed inset-0 z-50 overflow-y-auto relative">
+  <!-- Cover Image Background -->
+  <div class="absolute inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+  </div>
+
+  <div class="relative z-10">
+    <.ui_container class="max-w-sm py-8 min-h-screen">
+      <!-- Timer Card -->
+      <.ui_card>
+        <.ui_card_content>
+          <div class="text-center">
+            <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-orange-100 mb-3">
+              <div class="text-center">
+                <div id="finding-timer" class="text-4xl font-bold text-orange-600" phx-hook="FindingTimer">
+                  20
+                </div>
+              </div>
+            </div>
+            <p class="text-sm text-gray-600 font-medium">segundos restantes</p>
+          </div>
+        </.ui_card_content>
+      </.ui_card>
+
+      <%= if @player_info.group_id do %>
+        <!-- Group Info Card -->
+        <.ui_card>
+          <.ui_card_header>
+            <div class="text-center">
+              <div class="text-7xl mb-3 animate-bounce"><%= @player_info.group_emoji %></div>
+              <h2 class="text-2xl font-bold text-gray-900">Tu Grupo</h2>
+              <p class="text-sm text-gray-600 mt-1">¡Memoriza a tus compañeros!</p>
+            </div>
+          </.ui_card_header>
+
+          <.ui_card_content>
+            <!-- Team Members -->
+            <h3 class="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <.icon name="hero-user-group" class="w-5 h-5" />
+              Miembros del Equipo
+            </h3>
+
+            <div class="space-y-2 mb-4">
+              <%= for member <- @player_info.group_members do %>
+                <div class="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="font-medium text-gray-900"><%= member.name %></span>
+                    <%= if member.indie_id == @player_info.player_id do %>
+                      <.ui_badge variant="info">TÚ</.ui_badge>
+                    <% end %>
+                  </div>
+                  <%= case Map.get(member, :role) do %>
+                    <% :decoder -> %>
+                      <.ui_badge variant="warning">🔑 Descifrador</.ui_badge>
+                    <% :code_holder -> %>
+                      <.ui_badge variant="info">📜 Guardián del Código</.ui_badge>
+                    <% :solver -> %>
+                      <.ui_badge variant="success">🧩 Solucionador</.ui_badge>
+                    <% _ -> %>
+                      <.ui_badge>Jugador</.ui_badge>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+
+            <%= if @player_info.is_leader do %>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <div class="flex items-start gap-2">
+                  <span class="text-2xl">🔑</span>
+                  <div>
+                    <h4 class="font-bold text-yellow-900 text-sm mb-1">¡Eres el Descifrador!</h4>
+                    <p class="text-yellow-800 text-sm">
+                      Serás el único que puede enviar la respuesta final una vez que tu equipo haya resuelto el puzzle.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            <% end %>
+
+            <!-- How to Play -->
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h4 class="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <.icon name="hero-play" class="w-5 h-5" />
+                Cómo jugar
+              </h4>
+              <div class="space-y-2 text-sm text-gray-700">
+                <div class="flex items-start gap-2">
+                  <span class="text-lg">🧩</span>
+                  <p><strong>Solucionadores:</strong> Tienen pistas para resolver el puzzle</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="text-lg">📜</span>
+                  <p><strong>Guardián del Código:</strong> Tiene información especial sobre el código secreto</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="text-lg">🔑</span>
+                  <p><strong>Descifrador:</strong> Es el único que puede enviar la respuesta final</p>
+                </div>
+              </div>
+              <div class="mt-3 pt-3 border-t border-gray-300">
+                <p class="text-sm text-gray-700">
+                  💡 <strong>¡Conozcan a sus compañeros!</strong> En la siguiente fase, trabajarán juntos para resolver el puzzle.
+                </p>
+              </div>
+            </div>
+          </.ui_card_content>
+        </.ui_card>
+      <% else %>
+        <!-- Loading State Card -->
+        <.ui_card>
+          <.ui_card_content>
+            <div class="text-center py-8">
+              <div class="text-6xl mb-4 animate-spin">🔄</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Asignando grupo...</h3>
+              <p class="text-gray-600">
+                Espera un momento mientras te asignamos a un equipo
+              </p>
+            </div>
+          </.ui_card_content>
+        </.ui_card>
+      <% end %>
+    </.ui_container>
+  </div>
+</div>

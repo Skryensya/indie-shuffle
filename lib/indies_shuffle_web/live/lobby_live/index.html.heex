@@ -125,22 +125,15 @@
                     <span class="text-4xl mb-4 block">⏳</span>
                     <p class="text-lg text-gray-600 mb-2">Esperando más jugadores</p>
                     <p class="text-sm text-gray-500">
-                      Se necesitan <%= @players_needed %> jugador<%= if @players_needed != 1, do: "es" %> más para comenzar
+                      Se necesitan al menos <%= @players_needed %> jugador<%= if @players_needed != 1, do: "es" %> más para comenzar (mínimo 2)
                     </p>
                   </div>
                 <% :ready -> %>
                   <div class="mb-4">
                     <span class="text-4xl mb-4 block">✅</span>
                     <p class="text-lg text-green-600 mb-2">¡Listo para comenzar!</p>
-                    <p class="text-sm text-gray-500">Hay suficientes jugadores para empezar el juego</p>
+                    <p class="text-sm text-gray-500">El administrador iniciará el juego cuando esté listo</p>
                   </div>
-                  
-                  <%= if @can_start_game do %>
-                    <.ui_button variant="primary" class="w-full" phx-click="start_game">
-                      <.icon name="hero-play" class="w-4 h-4" />
-                      Comenzar Juego
-                    </.ui_button>
-                  <% end %>
                 <% :full -> %>
                   <div class="mb-4">
                     <span class="text-4xl mb-4 block">🚫</span>

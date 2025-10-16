@@ -3,18 +3,18 @@ defmodule IndiesShuffle.Game.GameServer do
   Main game server that manages game state, phases, and player interactions.
   Handles the complete game lifecycle from player grouping to scoring.
   """
-  
+
   use GenServer
   alias IndiesShuffle.Game.{PuzzleEngine, Grouping}
   alias IndiesShuffleWeb.Presence
-  
+
   @topic_prefix "game:"
   @lobby_topic "lobby:presence"
-  
+
   # Phase durations in milliseconds
-  @finding_duration 60_000    # 60 seconds to find group members
+  @finding_duration 20_000    # 20 seconds to find group members
   @solving_duration 300_000   # 5 minutes to solve puzzle
-  @scoring_duration 30_000    # 30 seconds to show results
+  @scoring_duration 10_000    # 10 seconds to show results
 
   # === Public API ===
 
@@ -96,15 +96,15 @@ defmodule IndiesShuffle.Game.GameServer do
   @impl true
   def handle_cast(:start_game, state) do
     players = fetch_lobby_players()
-    
+
     if Grouping.sufficient_players?(length(players)) do
       groups = Grouping.group_players(players)
       secret = PuzzleEngine.random_secret()
       rules = PuzzleEngine.generate_rules(secret)
-      
+
       # Distribute rules among all players
       rules_by_player = distribute_rules_to_players(groups, rules)
-      
+
       new_state = %{state |
         phase: :finding,
         groups: groups,
@@ -113,15 +113,18 @@ defmodule IndiesShuffle.Game.GameServer do
         rules_by_player: rules_by_player,
         start_time: System.system_time(:millisecond)
       }
-      
-      # Broadcast game start
+
+      # Broadcast game start to lobby to redirect all players
+      broadcast_to_lobby({:game_starting, state.id})
+
+      # Broadcast game start to game channel
       broadcast_game_event(state.id, {:game_started, groups})
       broadcast_phase_change(state.id, :finding)
-      
+
       # Schedule next phase
       timer_ref = Process.send_after(self(), :move_to_solving, @finding_duration)
       new_state = put_in(new_state.phase_timers[:finding], timer_ref)
-      
+
       {:noreply, new_state}
     else
       broadcast_game_event(state.id, {:error, "Not enough players to start game"})
@@ -131,10 +134,10 @@ defmodule IndiesShuffle.Game.GameServer do
 
   @impl true
   def handle_cast({:player_disconnected, player_id}, state) do
-    new_state = %{state | 
+    new_state = %{state |
       disconnected_players: MapSet.put(state.disconnected_players, player_id)
     }
-    
+
     broadcast_game_event(state.id, {:player_disconnected, player_id})
     {:noreply, new_state}
   end
@@ -163,25 +166,25 @@ defmodule IndiesShuffle.Game.GameServer do
     case validate_answer_submission(state, group_id, leader_id, combination) do
       :ok ->
         is_correct = combination == state.secret
-        
+
         new_answers = Map.put(state.answers, group_id, %{
           combination: combination,
           is_correct: is_correct,
           submitted_at: System.system_time(:millisecond),
           leader_id: leader_id
         })
-        
+
         new_state = %{state | answers: new_answers}
-        
+
         broadcast_game_event(state.id, {:answer_submitted, group_id, is_correct})
-        
+
         # Check if all groups have answered
         if all_groups_answered?(new_state) do
           move_to_scoring(new_state)
         else
           {:reply, {:ok, is_correct}, new_state}
         end
-        
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -191,11 +194,11 @@ defmodule IndiesShuffle.Game.GameServer do
   def handle_info(:move_to_solving, state) do
     new_state = %{state | phase: :solving}
     broadcast_phase_change(state.id, :solving)
-    
+
     # Schedule scoring phase
     timer_ref = Process.send_after(self(), :move_to_scoring, @solving_duration)
     new_state = put_in(new_state.phase_timers[:solving], timer_ref)
-    
+
     {:noreply, new_state}
   end
 
@@ -206,6 +209,10 @@ defmodule IndiesShuffle.Game.GameServer do
 
   @impl true
   def handle_info(:end_game, state) do
+    # Notificar a todos que el juego ha terminado
+    broadcast_game_event(state.id, {:game_ended})
+    broadcast_phase_change(state.id, :waiting)
+
     # Clean up and prepare for new game
     new_state = %{state |
       phase: :waiting,
@@ -219,8 +226,7 @@ defmodule IndiesShuffle.Game.GameServer do
       start_time: nil,
       phase_timers: %{}
     }
-    
-    broadcast_phase_change(state.id, :waiting)
+
     {:noreply, new_state}
   end
 
@@ -252,28 +258,31 @@ defmodule IndiesShuffle.Game.GameServer do
     cond do
       state.phase != :solving ->
         {:error, "Game is not in solving phase"}
-      
+
       not PuzzleEngine.valid_combination?(combination) ->
         {:error, "Invalid combination format"}
-      
+
       Map.has_key?(state.answers, group_id) ->
         {:error, "Group has already submitted an answer"}
-      
-      not is_group_leader?(state, group_id, leader_id) ->
-        {:error, "Only group leader can submit answers"}
-      
+
+      not is_group_decoder?(state, group_id, leader_id) ->
+        {:error, "Only the decoder (team leader) can submit answers"}
+
       leader_id in state.disconnected_players ->
         {:error, "Disconnected players cannot submit answers"}
-      
+
       true ->
         :ok
     end
   end
 
-  defp is_group_leader?(state, group_id, leader_id) do
+  defp is_group_decoder?(state, group_id, player_id) do
     case Enum.find(state.groups, &(&1.id == group_id)) do
-      %{leader_id: ^leader_id} -> true
-      _ -> false
+      %{leader_id: ^player_id} ->
+        # Leader is always the decoder (assigned in grouping)
+        true
+      _ ->
+        false
     end
   end
 
@@ -293,27 +302,27 @@ defmodule IndiesShuffle.Game.GameServer do
 
   defp move_to_scoring(state) do
     scores = calculate_scores(state)
-    new_state = %{state | 
-      phase: :scoring, 
+    new_state = %{state |
+      phase: :scoring,
       scores: scores
     }
-    
+
     broadcast_phase_change(state.id, :scoring)
     broadcast_game_event(state.id, {:final_scores, scores, state.secret})
-    
+
     # Schedule game end
     timer_ref = Process.send_after(self(), :end_game, @scoring_duration)
     new_state = put_in(new_state.phase_timers[:scoring], timer_ref)
-    
+
     {:noreply, new_state}
   end
 
   defp calculate_scores(state) do
     Enum.map(state.groups, fn group ->
       answer = Map.get(state.answers, group.id)
-      
+
       base_score = if answer && answer.is_correct, do: 100, else: 0
-      
+
       # Bonus points for speed (if answered correctly)
       speed_bonus = if answer && answer.is_correct do
         time_taken = answer.submitted_at - state.start_time
@@ -321,16 +330,16 @@ defmodule IndiesShuffle.Game.GameServer do
       else
         0
       end
-      
+
       # Penalty for disconnected members
       connected_members = Enum.count(group.members, fn member ->
         member.indie_id not in state.disconnected_players
       end)
-      
+
       disconnection_penalty = (length(group.members) - connected_members) * 10
-      
+
       final_score = max(0, base_score + speed_bonus - disconnection_penalty)
-      
+
       %{
         group_id: group.id,
         group_emoji: group.emoji,
@@ -360,6 +369,14 @@ defmodule IndiesShuffle.Game.GameServer do
       IndiesShuffle.PubSub,
       @topic_prefix <> game_id,
       {:phase_change, phase}
+    )
+  end
+
+  defp broadcast_to_lobby(event) do
+    Phoenix.PubSub.broadcast(
+      IndiesShuffle.PubSub,
+      @lobby_topic,
+      event
     )
   end
 end

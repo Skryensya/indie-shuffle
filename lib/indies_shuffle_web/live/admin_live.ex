@@ -46,9 +46,15 @@ defmodule IndiesShuffleWeb.AdminLive do
 
   @impl true
   def handle_event("admin_login", %{"username" => username, "password" => password}, socket) do
-    admin_config = Application.get_env(:indies_shuffle, :admin)
-    admin_username = admin_config[:username]
-    admin_password = admin_config[:password]
+    # Read directly from environment variables at runtime
+    admin_username = System.get_env("ADMIN_USERNAME") || "admin"
+    admin_password = System.get_env("ADMIN_PASSWORD") || "admin123"
+
+    IO.puts("🔐 Login attempt:")
+    IO.puts("  Username provided: '#{username}'")
+    IO.puts("  Password provided: '#{password}'")
+    IO.puts("  Expected username: '#{admin_username}'")
+    IO.puts("  Expected password: '#{admin_password}'")
 
     if username == admin_username and password == admin_password do
       # Authentication successful - create a simple token
@@ -57,6 +63,8 @@ defmodule IndiesShuffleWeb.AdminLive do
       {:noreply,
        socket
        |> assign(admin_authenticated: true, login_form: nil)
+       |> assign(connected_users: list_connected_users())
+       |> assign(banned_users: IndiesShuffle.BanManager.list_banned_users())
        |> put_flash(:info, "Bienvenido al panel de administración")
        |> push_event("set_admin_token", %{token: token})}
     else
@@ -128,7 +136,7 @@ defmodule IndiesShuffleWeb.AdminLive do
   def handle_event("start_game", _params, socket) do
     players_count = length(socket.assigns.connected_users)
 
-    if players_count >= 4 do
+    if players_count >= 2 do
       # Generate a unique game ID
       game_id = generate_game_id()
       
@@ -154,7 +162,7 @@ defmodule IndiesShuffleWeb.AdminLive do
     else
       {:noreply,
        socket
-       |> put_flash(:error, "Se necesitan al menos 4 jugadores para empezar")}
+       |> put_flash(:error, "Se necesitan al menos 2 jugadores para empezar")}
     end
   end
 

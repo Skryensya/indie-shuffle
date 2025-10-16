@@ -1,16 +1,29 @@
 defmodule IndiesShuffle.Game.Grouping do
   @moduledoc """
   Handles automatic grouping of players for the combination game.
-  Creates groups of 4-6 players with assigned leaders and group identifiers.
+  Creates groups of 4-6 players with assigned leaders, roles, and group identifiers.
   """
 
-  @min_group_size 4
+  @min_group_size 2
   @max_group_size 6
   @group_emojis ~w(🦊 🦉 🐢 🐙 🐝 🦄 🐺 🌶️ 🔮 🌊 ⚡ 🎯 🌟 🎨 🎭 🎪)
 
+  # Roles that can be assigned to players
+  @roles [:solver, :decoder, :code_holder]
+
   @doc """
-  Groups players into teams of 4-6 members with automatic leader assignment.
-  Returns a list of group maps with id, emoji, leader_id, and members.
+  Returns the list of available roles.
+  """
+  def roles, do: @roles
+
+  @doc """
+  Groups players into teams of 4-6 members with automatic leader assignment and role distribution.
+  Returns a list of group maps with id, emoji, leader_id, and members with roles.
+
+  Roles:
+  - :decoder - Only player who can submit the final answer (1 per group)
+  - :code_holder - Has special information about the secret code (1 per group)
+  - :solver - Regular players with clues (remaining members)
   """
   def group_players(players) when is_list(players) and length(players) >= @min_group_size do
     players
@@ -18,11 +31,14 @@ defmodule IndiesShuffle.Game.Grouping do
     |> create_balanced_groups()
     |> Enum.with_index()
     |> Enum.map(fn {members, index} ->
+      members_with_roles = assign_roles_to_members(members)
+      decoder = Enum.find(members_with_roles, fn m -> m.role == :decoder end)
+
       %{
         id: "group_#{index + 1}",
         emoji: Enum.at(@group_emojis, index),
-        leader_id: select_leader(members),
-        members: members
+        leader_id: decoder.indie_id,  # Decoder is always the leader
+        members: members_with_roles
       }
     end)
   end
@@ -76,37 +92,77 @@ defmodule IndiesShuffle.Game.Grouping do
     end)
   end
 
-  defp select_leader(members) when is_list(members) and length(members) > 0 do
-    member = Enum.random(members)
-    case member do
-      %{indie_id: indie_id} -> indie_id
-      %{id: id} -> id
-      _ -> member
-    end
+  # Assigns roles to group members:
+  # - First member: :decoder (can submit answers)
+  # - Second member: :code_holder (has special code information)
+  # - Remaining members: :solver (have puzzle clues)
+  defp assign_roles_to_members(members) when is_list(members) do
+    members
+    |> Enum.shuffle()  # Randomize role assignment
+    |> Enum.with_index()
+    |> Enum.map(fn {member, index} ->
+      role = case index do
+        0 -> :decoder
+        1 -> :code_holder
+        _ -> :solver
+      end
+
+      # Add role to member map
+      Map.put(member, :role, role)
+    end)
   end
 
   @doc """
-  Distributes rules among group members, ensuring each player gets 1-2 rules.
+  Distributes rules among group members based on their roles:
+  - Decoders: No rules (they only submit answers based on team discussion)
+  - Code holders: 1-2 special rules about the secret code
+  - Solvers: Remaining rules distributed evenly
   """
   def distribute_rules(group, rules) do
-    member_count = length(group.members)
-    rules_per_member = max(1, div(length(rules), member_count))
-    
-    group.members
-    |> Enum.with_index()
-    |> Enum.map(fn {member, index} ->
-      start_index = index * rules_per_member
-      member_rules = Enum.slice(rules, start_index, rules_per_member)
-      
-      # Add extra rules to first few members if there are remainders
-      extra_rules = if index < rem(length(rules), member_count) do
-        [Enum.at(rules, member_count * rules_per_member + index)]
-      else
-        []
-      end
-      
-      {get_member_id(member), member_rules ++ extra_rules}
-    end)
+    # Separate members by role
+    decoder = Enum.find(group.members, fn m -> m.role == :decoder end)
+    code_holder = Enum.find(group.members, fn m -> m.role == :code_holder end)
+    solvers = Enum.filter(group.members, fn m -> m.role == :solver end)
+
+    # Decoder gets no rules
+    decoder_assignment = {get_member_id(decoder), []}
+
+    # Code holder gets first 1-2 rules (special code information)
+    code_holder_rules_count = min(2, max(1, div(length(rules), 3)))
+    code_holder_rules = Enum.take(rules, code_holder_rules_count)
+    code_holder_assignment = {get_member_id(code_holder), code_holder_rules}
+
+    # Distribute remaining rules among solvers
+    remaining_rules = Enum.drop(rules, code_holder_rules_count)
+    solver_assignments = if length(solvers) > 0 do
+      rules_per_solver = max(1, div(length(remaining_rules), length(solvers)))
+
+      solvers
+      |> Enum.with_index()
+      |> Enum.map(fn {solver, index} ->
+        start_index = index * rules_per_solver
+        solver_rules = Enum.slice(remaining_rules, start_index, rules_per_solver)
+
+        # Add extra rules to first few solvers if there are remainders
+        extra_rules = if index < rem(length(remaining_rules), length(solvers)) do
+          extra_index = length(solvers) * rules_per_solver + index
+          if extra_index < length(remaining_rules) do
+            [Enum.at(remaining_rules, extra_index)]
+          else
+            []
+          end
+        else
+          []
+        end
+
+        {get_member_id(solver), solver_rules ++ extra_rules}
+      end)
+    else
+      []
+    end
+
+    # Combine all assignments
+    [decoder_assignment, code_holder_assignment | solver_assignments]
     |> Map.new()
   end
 

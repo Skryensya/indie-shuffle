@@ -20,7 +20,6 @@ defmodule IndiesShuffleWeb.Router do
     live_session :default do
       live "/", LobbyLive, :index
       live "/ui-demo", UiDemoLive, :index
-      live "/game/:game_id", GameLive, :index
     end
 
     live_session :admin,
