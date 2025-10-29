@@ -9,6 +9,7 @@ defmodule IndiesShuffle.Application do
   def start(_type, _args) do
     children = [
       IndiesShuffleWeb.Telemetry,
+      IndiesShuffle.Repo,
       {DNSCluster, query: Application.get_env(:indies_shuffle, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: IndiesShuffle.PubSub},
       {Registry, keys: :unique, name: IndiesShuffle.Registry},

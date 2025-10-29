@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    env_file:
+      - .env.prod
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: true
+
+    # Expuesto solo internamente para Traefik
+    expose:
+      - "4000"
+
+    depends_on:
+      - db
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.indies.rule=Host(`${PHX_HOST}`)"
+      - "traefik.http.routers.indies.entrypoints=websecure"
+      - "traefik.http.routers.indies.tls.certresolver=le"
+      - "traefik.http.services.indies.loadbalancer.server.port=4000"
+
+    networks:
+      - traefik_proxy
+      - internal
+
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    env_file:
+      - .env.prod
+    environment:
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - internal
+
+    restart: unless-stopped
+
+networks:
+  traefik_proxy:
+    external: true
+  internal:
+    internal: true
+
+volumes:

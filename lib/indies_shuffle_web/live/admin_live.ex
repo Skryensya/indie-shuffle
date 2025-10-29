@@ -25,7 +25,9 @@ defmodule IndiesShuffleWeb.AdminLive do
            socket
            |> assign(admin_authenticated: true, login_form: nil)
            |> assign(connected_users: list_connected_users())
-           |> assign(banned_users: IndiesShuffle.BanManager.list_banned_users())}
+           |> assign(banned_users: IndiesShuffle.BanManager.list_banned_users())
+           |> assign(question_form: to_form(%{}))
+           |> assign(open_question_menu_id: nil)}
         else
           {:ok, assign(socket, admin_authenticated: false, login_form: to_form(%{}))}
         end
@@ -38,7 +40,9 @@ defmodule IndiesShuffleWeb.AdminLive do
          socket
          |> assign(admin_authenticated: true, login_form: nil)
          |> assign(connected_users: list_connected_users())
-         |> assign(banned_users: IndiesShuffle.BanManager.list_banned_users())}
+         |> assign(banned_users: IndiesShuffle.BanManager.list_banned_users())
+         |> assign(question_form: to_form(%{}))
+         |> assign(open_question_menu_id: nil)}
       _ ->
         {:ok, assign(socket, admin_authenticated: false, login_form: to_form(%{}))}
     end
@@ -57,6 +61,10 @@ defmodule IndiesShuffleWeb.AdminLive do
       {:noreply,
        socket
        |> assign(admin_authenticated: true, login_form: nil)
+       |> assign(connected_users: list_connected_users())
+       |> assign(banned_users: IndiesShuffle.BanManager.list_banned_users())
+       |> assign(question_form: to_form(%{}))
+       |> assign(open_question_menu_id: nil)
        |> put_flash(:info, "Bienvenido al panel de administración")
        |> push_event("set_admin_token", %{token: token})}
     else

@@ -63,7 +63,10 @@ defmodule IndiesShuffle.MixProject do
       {:jason, "~> 1.2"},
       {:joken, "~> 2.6"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+      {:ecto, "~> 3.11"},
+      {:ecto_sql, "~> 3.11"},
+      {:postgrex, "~> 0.21"}
     ]
   end
 
@@ -77,6 +80,9 @@ defmodule IndiesShuffle.MixProject do
     [
       # Project setup
       setup: ["deps.get", "assets.setup", "assets.build"],
+      "setup.db": ["ecto.setup"],
+      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind indies_shuffle", "esbuild indies_shuffle"],
       "assets.deploy": [

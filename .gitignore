@@ -35,6 +35,13 @@ indies_shuffle-*.tar
 npm-debug.log
 /assets/node_modules/
 
-# Environment variables (contains sensitive information)
+# ───────────────────────────────
+# Environment variables (sensitive)
+# ───────────────────────────────
+# Ignorar todos los .env reales
 .env
+.env.*
+# Excepto los de ejemplo
+!.env.prod.example
+!.env.dev.example
 

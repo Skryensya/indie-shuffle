@@ -1,0 +1,41 @@
+# ---- build -----
+FROM hexpm/elixir:1.16.2-erlang-26.2.5-alpine-3.19 AS build
+RUN apk add --no-cache build-base git nodejs npm python3
+
+ENV MIX_ENV=prod
+WORKDIR /app
+RUN mix local.hex --force && mix local.rebar --force
+
+# Deps
+COPY mix.exs mix.lock ./
+COPY config config
+RUN mix deps.get --only prod && mix deps.compile
+
+# Assets
+COPY assets assets
+RUN npm --prefix ./assets ci && npm --prefix ./assets run deploy
+
+# Código
+COPY lib lib
+COPY priv priv
+
+RUN mix phx.digest
+RUN mix release
+
+# ---- runtime -----
+FROM alpine:3.19 AS app
+RUN apk add --no-cache openssl ncurses-libs libstdc++ bash curl wget
+
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+
+COPY --from=build /app/_build/prod/rel/indies_shuffle ./
+
+ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000
+
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD wget -qO- http://127.0.0.1:${PORT}/ || exit 1
+
+USER app
+EXPOSE 4000
+ENTRYPOINT ["bin/indies_shuffle", "start"]

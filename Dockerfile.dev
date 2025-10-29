@@ -38,5 +38,5 @@ RUN mix setup
 # 🌐 Expose Phoenix port
 EXPOSE 4000
 
-# 🏁 Default command - always update deps then start server
-CMD ["sh", "-c", "mix deps.get && mix phx.server"]
+# 🏁 Default command - setup database and start server
+CMD ["sh", "-c", "mix deps.get && mix setup.db && mix phx.server"]

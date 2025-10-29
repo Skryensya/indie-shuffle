@@ -8,6 +8,7 @@
 import Config
 
 config :indies_shuffle,
+  ecto_repos: [IndiesShuffle.Repo],
   generators: [timestamp_type: :utc_datetime]
 
 # Configures the endpoint
