@@ -482,7 +482,7 @@ defmodule IndiesShuffleWeb.LobbyLive do
             mode: mode,
             phase: :finding_team,
             groups: groups,
-            finding_team_remaining: 31_000
+            finding_team_remaining: 91_000
           }
           player_info = %{
             player_id: my_indie_id,

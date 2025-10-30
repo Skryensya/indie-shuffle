@@ -99,14 +99,28 @@ if config_env() == :prod do
   #     config :swoosh, :api_client, Swoosh.ApiClient.Req
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
-  
+
   # Database configuration for production
   config :indies_shuffle, IndiesShuffle.Repo,
     database: "/app/db/indies_shuffle_prod.db",
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
-end
 
-# Admin credentials for all environments
-config :indies_shuffle, :admin,
-  username: System.get_env("ADMIN_USERNAME") || "admin",
-  password: System.get_env("ADMIN_PASSWORD") || "admin123"
+  # Admin credentials DEBEN venir de variables de entorno en producción
+  admin_username =
+    System.get_env("ADMIN_USERNAME") ||
+      raise """
+      environment variable ADMIN_USERNAME is missing.
+      This is required for production security.
+      """
+
+  admin_password =
+    System.get_env("ADMIN_PASSWORD") ||
+      raise """
+      environment variable ADMIN_PASSWORD is missing.
+      This is required for production security.
+      """
+
+  config :indies_shuffle,
+    admin_username: admin_username,
+    admin_password: admin_password
+end

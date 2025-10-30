@@ -84,7 +84,8 @@ config :indies_shuffle, IndiesShuffle.Repo,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 
-# Admin credentials (use environment variables in production)
-config :indies_shuffle, :admin,
-  username: System.get_env("ADMIN_USERNAME") || "admin",
-  password: System.get_env("ADMIN_PASSWORD") || "admin123"
+# Admin credentials para desarrollo SOLAMENTE
+# En producción, estas DEBEN venir de variables de entorno
+config :indies_shuffle,
+  admin_username: System.get_env("ADMIN_USERNAME") || "admin",
+  admin_password: System.get_env("ADMIN_PASSWORD") || "admin123"

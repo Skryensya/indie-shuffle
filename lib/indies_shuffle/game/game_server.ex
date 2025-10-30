@@ -149,7 +149,7 @@ defmodule IndiesShuffle.Game.GameServer do
 
       # Start in finding_team phase with 31 second timer (to ensure 30s is visible)
       finding_team_start = System.system_time(:millisecond)
-      timer_ref = Process.send_after(self(), :start_question_phase, 31_000)
+      timer_ref = Process.send_after(self(), :start_question_phase, 91_000)
 
       new_state = %{state |
         phase: :finding_team,  # Start with finding team phase
@@ -215,7 +215,7 @@ defmodule IndiesShuffle.Game.GameServer do
     # Calculate remaining time for finding team phase
     finding_team_remaining = if state.phase == :finding_team and state.finding_team_start_time do
       elapsed = System.system_time(:millisecond) - state.finding_team_start_time
-      max(0, 31_000 - elapsed)
+      max(0, 91_000 - elapsed)
     else
       0
     end
@@ -430,7 +430,7 @@ defmodule IndiesShuffle.Game.GameServer do
           IO.puts("⏰ Timer activado - iniciando fase de búsqueda de equipos (31s)")
           # Start in finding_team phase with 31 second timer (to ensure 30s is visible)
           start_time = System.system_time(:millisecond)
-          timer = Process.send_after(self(), :start_question_phase, 31_000)
+          timer = Process.send_after(self(), :start_question_phase, 91_000)
           {:finding_team, timer, start_time}
         else
           IO.puts("🚫 Timer desactivado - saltando DIRECTO a fase :question")

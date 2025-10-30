@@ -66,19 +66,11 @@ defmodule IndiesShuffleWeb.AdminLive do
 
   @impl true
   def handle_event("admin_login", %{"username" => username, "password" => password}, socket) do
-    IO.puts("🔐 Intento de login admin:")
-    IO.puts("  Usuario recibido: #{inspect(username)}")
-    IO.puts("  Contraseña recibida: #{String.length(password)} caracteres")
-
-    # Usar credenciales hardcodeadas por simplicidad
-    admin_username = "admin"
-    admin_password = "admin123"
-
-    IO.puts("  Usuario esperado: #{inspect(admin_username)}")
-    IO.puts("  Contraseña esperada: #{admin_password}")
+    # Leer credenciales del environment o usar valores por defecto SOLO para desarrollo
+    admin_username = System.get_env("ADMIN_USERNAME") || Application.get_env(:indies_shuffle, :admin_username)
+    admin_password = System.get_env("ADMIN_PASSWORD") || Application.get_env(:indies_shuffle, :admin_password)
 
     if username == admin_username and password == admin_password do
-      IO.puts("✅ Autenticación exitosa")
       # Authentication successful - create a simple token
       token = create_admin_token()
 
@@ -100,14 +92,11 @@ defmodule IndiesShuffleWeb.AdminLive do
        |> put_flash(:info, "Bienvenido al panel de administración")
        |> push_event("set_admin_token", %{token: token})}
     else
-      IO.puts("❌ Autenticación fallida")
-      IO.puts("  Comparación usuario: #{username == admin_username}")
-      IO.puts("  Comparación contraseña: #{password == admin_password}")
-      # Authentication failed
+      # Authentication failed - NO mostrar las credenciales esperadas
       {:noreply,
        socket
        |> assign(login_form: to_form(%{}))
-       |> put_flash(:error, "Credenciales incorrectas. Usuario esperado: admin, Contraseña: admin123")}
+       |> put_flash(:error, "Credenciales incorrectas")}
     end
   end
 
