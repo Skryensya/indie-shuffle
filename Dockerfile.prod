@@ -3,6 +3,8 @@
 # =========================
 FROM elixir:1.15-slim AS build
 
+ENV MIX_ENV=prod
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
@@ -21,13 +23,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
   rm -rf /var/lib/apt/lists/*
 
 COPY mix.exs mix.lock ./
-RUN MIX_ENV=prod mix deps.get --only prod
+RUN mix deps.get --only prod
 
 COPY . .
 
-RUN MIX_ENV=prod mix compile
-RUN MIX_ENV=prod mix assets.setup && MIX_ENV=prod mix assets.build
-RUN MIX_ENV=prod mix release
+RUN mix compile
+RUN mix assets.setup && mix assets.build
+RUN mix phx.digest
+RUN mix release
 
 
 # =========================
@@ -47,7 +50,6 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# ✅ Copia SOLO el release (esto crea /app/indies_shuffle)
 COPY --from=build /app/_build/prod/rel/indies_shuffle /app/indies_shuffle
 
 ENV MIX_ENV=prod \
@@ -57,8 +59,6 @@ ENV MIX_ENV=prod \
 
 EXPOSE 4000
 
-# ✅ MUY IMPORTANTE: entrar al folder correcto del release
 WORKDIR /app/indies_shuffle
 
-# ✅ Ejecutar el release correctamente
 CMD ["bin/indies_shuffle", "start"]
