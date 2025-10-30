@@ -17,31 +17,36 @@ alias IndiesShuffle.Questions.Question
 sample_questions = [
   %{
     text: "¿Cuál es tu color favorito?",
-    type: "multiple_choice",
-    options: ["Azul", "Rojo", "Verde", "Amarillo"],
-    correct_answer: nil,
-    category: "personal"
+    category: "preferencias"
   },
   %{
     text: "¿Qué prefieres hacer en tu tiempo libre?",
-    type: "multiple_choice", 
-    options: ["Leer", "Ver películas", "Hacer ejercicio", "Cocinar"],
-    correct_answer: nil,
-    category: "personal"
+    category: "preferencias"
   },
   %{
-    text: "¿Cuántos continentes hay en el mundo?",
-    type: "multiple_choice",
-    options: ["5", "6", "7", "8"],
-    correct_answer: "7",
-    category: "trivia"
+    text: "¿Cuál ha sido tu experiencia más memorable?",
+    category: "experiencias"
+  },
+  %{
+    text: "¿Cómo te describes a ti mismo?",
+    category: "personalidad"
+  },
+  %{
+    text: "¿Qué actividad te divierte más?",
+    category: "diversion"
   }
 ]
 
 Enum.each(sample_questions, fn question_data ->
-  %Question{}
-  |> Question.changeset(question_data)
-  |> Repo.insert!()
+  case Repo.get_by(Question, text: question_data.text) do
+    nil ->
+      %Question{}
+      |> Question.changeset(question_data)
+      |> Repo.insert!()
+      IO.puts("Creada pregunta: #{question_data.text}")
+    _existing ->
+      IO.puts("Pregunta ya existe: #{question_data.text}")
+  end
 end)
 
 IO.puts("✅ Base de datos poblada con datos de ejemplo")

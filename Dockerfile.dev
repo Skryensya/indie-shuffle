@@ -4,13 +4,12 @@ FROM elixir:1.15-slim
 # 🧩 Set working dir
 WORKDIR /app
 
-# ⚙️ Install system dependencies
+# ⚙️ Install system dependencies including curl for healthcheck
 RUN apt-get update && apt-get install -y \
   build-essential \
   git \
   inotify-tools \
   curl \
-  watchman \
   && rm -rf /var/lib/apt/lists/*
 
 # 🧰 Install Hex + Rebar
@@ -22,21 +21,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
   npm install -g npm@latest && \
   rm -rf /var/lib/apt/lists/*
 
-# 🔒 Cache dependencies first
-COPY mix.exs mix.lock ./
-RUN mix deps.get
-
-# 🧩 Copy rest of app
-COPY . .
-
-# 🔄 Update deps to handle git dependencies correctly
-RUN mix deps.update --all || true
-
-# 🔧 Setup and compile assets
-RUN mix setup
-
 # 🌐 Expose Phoenix port
 EXPOSE 4000
 
-# 🏁 Default command - setup database and start server
-CMD ["sh", "-c", "mix deps.get && mix setup.db && mix phx.server"]
+# 🏁 Default command - install deps, setup database and start server
+CMD ["sh", "-c", "mix deps.get && mix assets.setup && mix assets.build && mix ecto.create && mix ecto.migrate && mix phx.server"]

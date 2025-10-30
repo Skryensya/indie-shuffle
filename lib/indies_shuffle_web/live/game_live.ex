@@ -1,6 +1,7 @@
 defmodule IndiesShuffleWeb.GameLive do
   use IndiesShuffleWeb, :live_view
   alias IndiesShuffle.Game.GameServer
+  alias IndiesShuffle.Users
   alias Phoenix.PubSub
 
   embed_templates "game_live/*"
@@ -47,6 +48,9 @@ defmodule IndiesShuffleWeb.GameLive do
 
   @impl true
   def handle_event("init_indie_id", %{"indie_id" => indie_id}, socket) do
+    # Log user entry
+    log_user_entry(socket, indie_id)
+    
     # Get current game state with player context
     socket = assign(socket, indie_id: indie_id, checking_auth: false)
 
@@ -95,16 +99,20 @@ defmodule IndiesShuffleWeb.GameLive do
 
   @impl true
   def handle_info({:game_event, event}, socket) do
+    IO.puts("🎮 GameLive recibió evento: #{inspect(event)}")
     socket = handle_game_event(socket, event)
     {:noreply, socket}
   end
 
   @impl true
-  def handle_info({:phase_change, _new_phase}, socket) do
+  def handle_info({:phase_change, new_phase}, socket) do
+    IO.puts("🔄 GameLive recibió cambio de fase: #{new_phase}")
     # Get fresh game state when phase changes
     try do
       game_state = GameServer.get_state(socket.assigns.game_id)
       player_info = get_player_info(socket, game_state)
+      IO.puts("🔍 GameLive estado actualizado - Fase: #{game_state.phase}")
+      IO.puts("🔍 Player info - Grupo: #{player_info.group_id}")
       {:noreply, assign(socket, game_state: game_state, player_info: player_info)}
     catch
       :exit, _ ->
@@ -256,4 +264,38 @@ defmodule IndiesShuffleWeb.GameLive do
         socket
     end
   end
+
+  # Helper function to log user entries
+  defp log_user_entry(socket, indie_id) do
+    try do
+      user_attrs = %{
+        nickname: indie_id,
+        session_id: get_session_id(socket),
+        ip_address: get_connect_info(socket, :peer_data)[:address] |> ip_to_string(),
+        user_agent: get_connect_info(socket, :user_agent)
+      }
+      
+      Users.log_user_entry(user_attrs)
+    rescue
+      error ->
+        IO.puts("Error logging user entry: #{inspect(error)}")
+    end
+  end
+
+  # Helper to get session ID from socket
+  defp get_session_id(socket) do
+    case get_connect_info(socket, :session) do
+      %{"_csrf_token" => token} -> token
+      _ -> 
+        # Fallback to a combination of peer info and timestamp
+        peer_info = get_connect_info(socket, :peer_data) || %{}
+        "#{inspect(peer_info)}_#{:os.system_time(:millisecond)}"
+    end
+  end
+
+  # Helper to convert IP tuple to string
+  defp ip_to_string({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
+  defp ip_to_string({a, b, c, d, e, f, g, h}), do: "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"
+  defp ip_to_string(ip) when is_binary(ip), do: ip
+  defp ip_to_string(_), do: "unknown"
 end

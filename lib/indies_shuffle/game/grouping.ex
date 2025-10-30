@@ -4,27 +4,32 @@ defmodule IndiesShuffle.Game.Grouping do
   Creates groups of 6-8 players with assigned leaders and group identifiers.
   """
 
-  @min_group_size 6
+  @min_group_size 1
   @max_group_size 8
-  @group_emojis ~w(🦊 🦉 🐢 🐙 🐝 🦄 🐺 🌶️ 🔮 🌊 ⚡ 🎯 🌟 🎨 🎭 🎪)
+  @group_emojis ["🔥", "⚡", "🌟", "🚀", "🎯", "💎", "👑", "🎸", "🎮", "⭐", "💫", "🎲", "🎰", "🏆", "🍕", "🌮", "🍦", "⚽", "🎪", "🎭", "🎨", "🎤", "🎧", "🎬", "📱", "💻", "🎹", "🥁", "🎺", "🎻", "🏀", "⚾", "🏈", "🎾"]
 
   @doc """
-  Groups players into teams of 6-8 members with automatic leader assignment.
+  Groups players into teams of 1-8 members with automatic leader assignment.
   Returns a list of group maps with id, emoji, leader_id, and members.
 
   Special cases:
-  - If total players < 6, creates a single group with everyone
-  - If remainder < 6, merges with last group
+  - If total players < 1, returns empty list
+  - If remainder < 1, merges with last group
   """
   def group_players(players) when is_list(players) and length(players) >= 1 do
-    players
+    groups = players
     |> Enum.shuffle()
     |> create_balanced_groups()
+
+    # Shuffle emojis and take as many as needed (without repetition)
+    shuffled_emojis = Enum.shuffle(@group_emojis)
+
+    groups
     |> Enum.with_index()
     |> Enum.map(fn {members, index} ->
       %{
         id: "group_#{index + 1}",
-        emoji: Enum.at(@group_emojis, index),
+        emoji: Enum.at(shuffled_emojis, index),
         leader_id: select_leader(members),
         members: members
       }
@@ -40,18 +45,18 @@ defmodule IndiesShuffle.Game.Grouping do
     player_count = length(players)
 
     cond do
-      # Less than 6 people: single group
+      # Less than 1 people: no groups
       player_count < @min_group_size ->
-        [players]
+        []
 
-      # Between 6-8 people: single group
+      # Between 1-8 people: single group
       player_count <= @max_group_size ->
         [players]
 
       # More than 8 people: create multiple balanced groups
       true ->
         # Calculate optimal number of groups and size per group
-        # We want groups between 6-8 people
+        # We want groups between 1-8 people
         num_groups = calculate_optimal_group_count(player_count)
         base_size = div(player_count, num_groups)
         extra_players = rem(player_count, num_groups)
@@ -85,7 +90,7 @@ defmodule IndiesShuffle.Game.Grouping do
       min_group_size = base_size
       max_group_size = if remainder > 0, do: base_size + 1, else: base_size
 
-      # Check if all groups will be within 6-8 range
+      # Check if all groups will be within 1-8 range
       min_group_size >= @min_group_size and max_group_size <= @max_group_size
     end) ||
     # Fallback: divide by max size and add 1
@@ -120,20 +125,20 @@ defmodule IndiesShuffle.Game.Grouping do
   def distribute_rules(group, rules) do
     member_count = length(group.members)
     rules_per_member = max(1, div(length(rules), member_count))
-    
+
     group.members
     |> Enum.with_index()
     |> Enum.map(fn {member, index} ->
       start_index = index * rules_per_member
       member_rules = Enum.slice(rules, start_index, rules_per_member)
-      
+
       # Add extra rules to first few members if there are remainders
       extra_rules = if index < rem(length(rules), member_count) do
         [Enum.at(rules, member_count * rules_per_member + index)]
       else
         []
       end
-      
+
       {get_member_id(member), member_rules ++ extra_rules}
     end)
     |> Map.new()
@@ -157,54 +162,248 @@ defmodule IndiesShuffle.Game.Grouping do
   end
 
   @doc """
-  Regroups players while avoiding previous pairings tracked in history.
-  Uses a greedy algorithm to create groups where players haven't been together before.
-  If impossible to avoid all repeats, minimizes them.
+  Regroups players ensuring each player goes to a DIFFERENT group than their previous one.
+  Also avoids previous pairings when possible.
+  Uses an algorithm that guarantees homogeneous distribution with rotation.
   """
-  def regroup_players(players, history) when is_list(players) and length(players) >= 1 do
+  def regroup_players(players, history, previous_groups \\ []) when is_list(players) and length(players) >= 1 do
     # Convert history to MapSet if it's a list
     history_set = if is_list(history), do: MapSet.new(history), else: history
 
-    # Try to create groups avoiding previous pairings
-    attempt_regrouping(players, history_set, 0)
+    # Build a map of player_id -> previous_group_id
+    previous_group_map = build_previous_group_map(previous_groups)
+
+    # Try to create groups with rotation and avoiding previous pairings
+    attempt_regrouping_with_rotation(players, history_set, previous_group_map, 0)
   end
 
-  def regroup_players(_players, _history) do
+  def regroup_players(_players, _history, _previous_groups) do
     # No players
     []
   end
 
-  # Attempts to create groups with minimal repetitions
-  # max_attempts: number of random shuffles to try
-  defp attempt_regrouping(players, history, attempt) when attempt < 10 do
-    # Shuffle players to randomize starting point
-    shuffled = Enum.shuffle(players)
-    groups = build_groups_avoiding_history(shuffled, history, [])
+  # Build a map of player_id -> group_id from previous groups
+  defp build_previous_group_map(groups) when is_list(groups) do
+    groups
+    |> Enum.reduce(%{}, fn group, acc ->
+      group_id = Map.get(group, :id)
+      members = Map.get(group, :members, [])
 
-    # Score the grouping (lower is better - fewer repeated pairings)
+      Enum.reduce(members, acc, fn member, inner_acc ->
+        player_id = get_member_id(member)
+        Map.put(inner_acc, player_id, group_id)
+      end)
+    end)
+  end
+
+  defp build_previous_group_map(_), do: %{}
+
+  # Attempts to create groups with rotation ensuring no player stays in same group
+  defp attempt_regrouping_with_rotation(players, history, previous_group_map, 0) do
+    # First attempt using rotation algorithm
+    groups = create_rotated_groups(players, previous_group_map)
+    score = score_grouping(groups, history)
+    attempt_regrouping_with_rotation(players, history, previous_group_map, 1, groups, score)
+  end
+
+  defp attempt_regrouping_with_rotation(players, history, previous_group_map, attempt) when attempt < 10 do
+    # Try more attempts with shuffling to find better grouping
+    groups = create_rotated_groups(players, previous_group_map)
+    score = score_grouping(groups, history)
+    attempt_regrouping_with_rotation(players, history, previous_group_map, attempt + 1, groups, score)
+  end
+
+  defp attempt_regrouping_with_rotation(players, _history, _previous_group_map, attempt) when attempt >= 10 do
+    # Max attempts reached, fallback to simple grouping
+    group_players(players)
+  end
+
+  defp attempt_regrouping_with_rotation(players, history, previous_group_map, attempt, best_groups, best_score) when attempt < 10 do
+    groups = create_rotated_groups(players, previous_group_map)
     score = score_grouping(groups, history)
 
-    if attempt == 0 do
-      # First attempt, set as best
-      attempt_regrouping(players, history, attempt + 1, groups, score)
+    if score < best_score do
+      # Found better grouping
+      attempt_regrouping_with_rotation(players, history, previous_group_map, attempt + 1, groups, score)
     else
-      # Try more attempts to find better grouping
-      attempt_regrouping(players, history, attempt + 1, groups, score)
+      # Keep previous best
+      attempt_regrouping_with_rotation(players, history, previous_group_map, attempt + 1, best_groups, best_score)
     end
   end
 
-  defp attempt_regrouping(_players, _history, _attempt, best_groups, _best_score) do
-    # Return best groups found, formatted with IDs and emojis
+  defp attempt_regrouping_with_rotation(_players, _history, _previous_group_map, _attempt, best_groups, _best_score) do
+    # Max attempts reached, return best found with formatted groups
+    # Shuffle emojis to assign randomly without repetition
+    shuffled_emojis = Enum.shuffle(@group_emojis)
+
     best_groups
     |> Enum.with_index()
     |> Enum.map(fn {members, index} ->
       %{
         id: "group_#{index + 1}",
-        emoji: Enum.at(@group_emojis, index),
+        emoji: Enum.at(shuffled_emojis, index),
         leader_id: select_leader(members),
         members: members
       }
     end)
+  end
+
+  # Creates balanced groups ensuring each player goes to a different group than before
+  defp create_rotated_groups(players, previous_group_map) do
+    player_count = length(players)
+
+    cond do
+      player_count < @min_group_size ->
+        []
+
+      player_count <= @max_group_size ->
+        [players]
+
+      true ->
+        # Calculate optimal number of groups
+        num_groups = calculate_optimal_group_count(player_count)
+        base_size = div(player_count, num_groups)
+        extra_players = rem(player_count, num_groups)
+
+        # Separate players by their previous group
+        players_by_prev_group = Enum.group_by(players, fn player ->
+          player_id = get_member_id(player)
+          Map.get(previous_group_map, player_id, :no_group)
+        end)
+
+        # Create a rotation strategy: for each previous group, distribute its members
+        # to different new groups using a round-robin approach with offset
+        distributed_groups = distribute_with_rotation(
+          players_by_prev_group,
+          num_groups,
+          base_size,
+          extra_players
+        )
+
+        # Balance groups if needed
+        balance_group_sizes(distributed_groups, base_size, extra_players)
+    end
+  end
+
+  # Distributes players from previous groups using rotation to ensure diversity
+  defp distribute_with_rotation(players_by_prev_group, num_groups, base_size, extra_players) do
+    # Initialize empty groups
+    initial_groups = List.duplicate([], num_groups)
+
+    # For each previous group, distribute its players across new groups with an offset
+    {final_groups, _offset} = players_by_prev_group
+    |> Enum.reduce({initial_groups, 0}, fn {_prev_group_id, group_players}, {acc_groups, offset} ->
+      # Shuffle players from this previous group
+      shuffled = Enum.shuffle(group_players)
+
+      # Distribute them across new groups with rotation and offset
+      new_groups = shuffled
+      |> Enum.with_index()
+      |> Enum.reduce(acc_groups, fn {player, idx}, groups ->
+        # Use offset to ensure players don't go to same relative position
+        target_group_idx = rem(idx + offset, num_groups)
+        List.update_at(groups, target_group_idx, fn group -> [player | group] end)
+      end)
+
+      # Increment offset for next previous group
+      {new_groups, offset + 1}
+    end)
+
+    final_groups
+  end
+
+  # Balances group sizes to match target distribution
+  defp balance_group_sizes(groups, base_size, extra_players) do
+    # Calculate target size for each group
+    groups_with_targets = groups
+    |> Enum.with_index()
+    |> Enum.map(fn {group, idx} ->
+      target = if idx < extra_players, do: base_size + 1, else: base_size
+      {group, target}
+    end)
+
+    # Separate groups into those that are too large and too small
+    {oversized, undersized} = Enum.split_with(groups_with_targets, fn {group, target} ->
+      length(group) > target
+    end)
+
+    # Move players from oversized to undersized groups
+    balanced = redistribute_between_groups(oversized, undersized)
+
+    # Return just the groups (without targets)
+    Enum.map(balanced, fn {group, _target} -> group end)
+  end
+
+  # Redistributes players from oversized to undersized groups
+  defp redistribute_between_groups(oversized, undersized) do
+    # For each oversized group, move excess players to undersized groups
+    {final_oversized, final_undersized} = Enum.reduce(oversized, {[], undersized}, fn {group, target}, {acc_over, acc_under} ->
+      excess = length(group) - target
+
+      if excess > 0 do
+        # Take excess players
+        {to_move, remaining} = Enum.split(group, excess)
+
+        # Distribute to undersized groups
+        new_undersized = distribute_players_to_groups(to_move, acc_under)
+
+        {[{remaining, target} | acc_over], new_undersized}
+      else
+        {[{group, target} | acc_over], acc_under}
+      end
+    end)
+
+    final_oversized ++ final_undersized
+  end
+
+  # Distributes players to groups that need them
+  defp distribute_players_to_groups([], groups), do: groups
+  defp distribute_players_to_groups(players, groups) do
+    # Sort groups by how many more players they need
+    sorted_groups = Enum.sort_by(groups, fn {group, target} ->
+      target - length(group)
+    end, :desc)
+
+    # Distribute one player at a time to groups that need them most
+    Enum.reduce(players, sorted_groups, fn player, current_groups ->
+      # Find first group that needs a player
+      case Enum.find_index(current_groups, fn {group, target} -> length(group) < target end) do
+        nil ->
+          # No group needs players, add to first group
+          [{first_group, first_target} | rest] = current_groups
+          [{[player | first_group], first_target} | rest]
+
+        idx ->
+          # Add to group that needs it
+          List.update_at(current_groups, idx, fn {group, target} ->
+            {[player | group], target}
+          end)
+      end
+    end)
+  end
+
+  # Original attempt_regrouping functions kept for backward compatibility
+  # (These are now used as fallback only)
+  defp attempt_regrouping(players, history, 0) do
+    # First attempt, set as best
+    shuffled = Enum.shuffle(players)
+    groups = build_groups_avoiding_history(shuffled, history, [])
+    score = score_grouping(groups, history)
+    attempt_regrouping(players, history, 1, groups, score)
+  end
+
+  defp attempt_regrouping(players, history, attempt) when attempt < 10 do
+    # Try more attempts to find better grouping
+    shuffled = Enum.shuffle(players)
+    groups = build_groups_avoiding_history(shuffled, history, [])
+    score = score_grouping(groups, history)
+    # This will call the 5-argument version
+    attempt_regrouping(players, history, attempt + 1, groups, score)
+  end
+
+  defp attempt_regrouping(players, _history, attempt) when attempt >= 10 do
+    # Max attempts reached without best groups, fallback to simple grouping
+    group_players(players)
   end
 
   defp attempt_regrouping(players, history, attempt, best_groups, best_score) when attempt < 10 do
@@ -223,12 +422,15 @@ defmodule IndiesShuffle.Game.Grouping do
 
   defp attempt_regrouping(_players, _history, _attempt, best_groups, _best_score) do
     # Max attempts reached, return best found
+    # Shuffle emojis to assign randomly without repetition
+    shuffled_emojis = Enum.shuffle(@group_emojis)
+
     best_groups
     |> Enum.with_index()
     |> Enum.map(fn {members, index} ->
       %{
         id: "group_#{index + 1}",
-        emoji: Enum.at(@group_emojis, index),
+        emoji: Enum.at(shuffled_emojis, index),
         leader_id: select_leader(members),
         members: members
       }

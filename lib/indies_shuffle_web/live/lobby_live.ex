@@ -69,17 +69,18 @@ defmodule IndiesShuffleWeb.LobbyLive do
       |> assign(:editing, false)
       |> assign(:players, [])
       |> assign(:game_state, :waiting)
-      |> assign(:players_needed, 6)
+      |> assign(:players_needed, 0)
       |> assign(:can_start_game, false)
       |> assign(:checking_auth, true)  # Nuevo estado para mostrar loading
       |> assign(:show_logout_modal, false)  # Control del modal
       |> assign(:game_active, false)
       |> assign(:my_group, nil)
       |> assign(:my_question, nil)
-      |> assign(:game_mode, nil)
-      |> assign(:mode, "groups")  # Modo por defecto
+      |> assign(:current_game_id, nil)
       |> assign(:game_phase, :waiting)
-      |> assign(:game_id, nil)
+      |> assign(:current_game_state, nil)
+      |> assign(:player_info, nil)
+      |> assign(:game_mode, "groups")
       |> assign(:finding_team_remaining, 0)
 
     if connected?(socket) do
@@ -93,6 +94,7 @@ defmodule IndiesShuffleWeb.LobbyLive do
       socket
       |> assign(:players, list_players())
       |> update_game_state()
+      |> check_and_join_active_game()
 
     {:ok, updated_socket}
   end
@@ -149,26 +151,33 @@ defmodule IndiesShuffleWeb.LobbyLive do
 
     # No permitir nombres vacíos
     if cleaned do
-      # Check if user is banned before allowing them to set name/join
-      if IndiesShuffle.BanManager.is_banned?(socket.assigns.indie_id) do
-        IO.puts("🚫 Usuario baneado intentando unirse: #{cleaned} (#{socket.assigns.indie_id})")
+      # Verificar que indie_id exista
+      if !socket.assigns.indie_id do
+        IO.puts("⚠️ indie_id no inicializado, esperando...")
         {:noreply,
          socket
-         |> assign(:joined, false)
-         |> assign(:editing, false)
-         |> put_flash(:error, "Tu cuenta ha sido suspendida. Contacta al administrador.")}
+         |> put_flash(:error, "Error de inicialización. Por favor, recarga la página.")}
       else
-        # Generar JWT con nombre e indie_id
-        jwt_token = generate_jwt(cleaned, socket.assigns.indie_id)
+        # Check if user is banned before allowing them to set name/join
+        if IndiesShuffle.BanManager.is_banned?(socket.assigns.indie_id) do
+          IO.puts("🚫 Usuario baneado intentando unirse: #{cleaned} (#{socket.assigns.indie_id})")
+          {:noreply,
+           socket
+           |> assign(:joined, false)
+           |> assign(:editing, false)
+           |> put_flash(:error, "Tu cuenta ha sido suspendida. Contacta al administrador.")}
+        else
+          # Generar JWT con nombre e indie_id
+          jwt_token = generate_jwt(cleaned, socket.assigns.indie_id)
 
       if jwt_token do
         IO.puts("💾 Generando JWT para: #{cleaned} (#{socket.assigns.indie_id})")
         IO.puts("🔐 JWT: #{String.slice(jwt_token, 0, 50)}...")
 
         # Si el usuario ya estaba unido, primero limpiar su presencia anterior
-        if socket.assigns.joined and socket.assigns.token do
+        if socket.assigns.joined and socket.assigns.indie_id do
           IO.puts("🧹 Limpiando presencia anterior para cambio de nombre")
-          Presence.untrack(self(), @topic, socket.assigns.token)
+          Presence.untrack(self(), @topic, socket.assigns.indie_id)
         end
 
         updated_socket =
@@ -192,6 +201,7 @@ defmodule IndiesShuffleWeb.LobbyLive do
         IO.puts("❌ Error generando JWT")
         {:noreply, socket}
       end
+        end
       end
     else
       # Nombre vacío - mantener estado sin permitir entrada
@@ -205,8 +215,16 @@ defmodule IndiesShuffleWeb.LobbyLive do
 
   @impl true
   def handle_event("edit_name", _, socket) do
-    IO.puts("🖊️ Usuario #{socket.assigns.name} (#{socket.assigns.indie_id}) quiere editar su nombre")
-    {:noreply, assign(socket, :editing, true)}
+    # Don't allow name editing during active games
+    if socket.assigns.game_active do
+      IO.puts("🚫 Usuario #{socket.assigns.name} intentó editar nombre durante juego activo")
+      {:noreply,
+       socket
+       |> put_flash(:error, "No puedes cambiar tu nombre durante un juego activo.")}
+    else
+      IO.puts("🖊️ Usuario #{socket.assigns.name} (#{socket.assigns.indie_id}) quiere editar su nombre")
+      {:noreply, assign(socket, :editing, true)}
+    end
   end
 
   @impl true
@@ -222,6 +240,29 @@ defmodule IndiesShuffleWeb.LobbyLive do
   @impl true
   def handle_event("hide_logout_modal", _, socket) do
     {:noreply, assign(socket, :show_logout_modal, false)}
+  end
+
+  # Handle return to lobby from ended game ONLY
+  @impl true
+  def handle_event("return_to_lobby", _params, socket) do
+    # Only allow returning to lobby if game has ended
+    if socket.assigns.game_phase == :ended do
+      {:noreply,
+       socket
+       |> assign(:game_active, false)
+       |> assign(:current_game_id, nil)
+       |> assign(:current_game_state, nil)
+       |> assign(:player_info, nil)
+       |> assign(:my_group, nil)
+       |> assign(:my_question, nil)
+       |> assign(:game_phase, :waiting)
+       |> push_event("clear-game-state", %{})}
+    else
+      # During active game, users cannot return to lobby
+      {:noreply,
+       socket
+       |> put_flash(:error, "No puedes volver al lobby durante un juego activo. Solo puedes cerrar sesión.")}
+    end
   end
 
   # Validar JWT desde cookie
@@ -243,20 +284,21 @@ defmodule IndiesShuffleWeb.LobbyLive do
           else
             IO.puts("✅ JWT válido - auto-login: #{name} (#{indie_id})")
 
-            # Verificar si el usuario ya está en Presence y usar el mismo token para evitar duplicados
-            existing_token = find_existing_user_token(indie_id) || generate_token()
-            IO.puts("🎫 Token usado: #{existing_token}")
+            # Generar token para esta sesión
+            session_token = generate_token()
+            IO.puts("🎫 Token de sesión generado: #{session_token}")
 
             updated_socket =
               socket
               |> assign(:name, name)
-              |> assign(:token, existing_token)
+              |> assign(:token, session_token)
               |> assign(:indie_id, indie_id)
               |> assign(:joined, true)
               |> assign(:checking_auth, false)
               |> track_user_presence()
               |> assign(:players, list_players())
               |> update_game_state()
+              |> check_and_join_active_game()
 
             {:noreply, updated_socket}
           end
@@ -288,41 +330,16 @@ defmodule IndiesShuffleWeb.LobbyLive do
 
   @impl true
   def handle_event("start_game", _, socket) do
-    players_count = length(socket.assigns.players)
-
-    if players_count >= 6 do
-      # Generate a unique game ID
-      game_id = generate_game_id()
-      mode = socket.assigns.mode || "groups"
-
-      IO.puts("🎮 Starting game: #{game_id} with mode: #{mode}")
-
-      # Start the game server with correct tuple format
-      case DynamicSupervisor.start_child(
-        IndiesShuffle.GameSupervisor,
-        {IndiesShuffle.Game.GameServer, {game_id, mode}}
-      ) do
-        {:ok, _pid} ->
-          # Start the game
-          IndiesShuffle.Game.GameServer.start_game(game_id)
-
-          # Redirect players to the game
-          {:noreply,
-           socket
-           |> assign(:game_state, :starting)
-           |> push_navigate(to: "/game/#{game_id}")
-           |> put_flash(:info, "¡Partida iniciada con #{players_count} jugadores!")}
-
-        {:error, reason} ->
-          IO.puts("❌ Error starting game: #{inspect(reason)}")
-          {:noreply,
-           socket
-           |> put_flash(:error, "Error al iniciar la partida. Inténtalo de nuevo.")}
-      end
+    # Users cannot start games - only admin can
+    # Also prevent during active games
+    if socket.assigns.game_active do
+      {:noreply,
+       socket
+       |> put_flash(:error, "Ya hay un juego en progreso")}
     else
       {:noreply,
        socket
-       |> put_flash(:error, "Se necesitan al menos 6 jugadores para empezar")}
+       |> put_flash(:error, "Solo el administrador puede iniciar el juego")}
     end
   end
 
@@ -330,15 +347,33 @@ defmodule IndiesShuffleWeb.LobbyLive do
   def handle_event("confirm_logout", _, socket) do
     IO.puts("🚪 Usuario cerrando sesión: #{socket.assigns.name || "Anónimo"}")
 
+    # Si el usuario está en un juego activo, notificar al GameServer
+    if socket.assigns.game_active and socket.assigns.current_game_id do
+      try do
+        IndiesShuffle.Game.GameServer.player_disconnected(
+          socket.assigns.current_game_id,
+          socket.assigns.indie_id
+        )
+        IO.puts("✅ Usuario #{socket.assigns.indie_id} desconectado del juego #{socket.assigns.current_game_id}")
+      rescue
+        error ->
+          IO.puts("⚠️ Error al desconectar del juego: #{inspect(error)}")
+      end
+    end
+
     # Limpiar presence si el usuario estaba conectado
-    if socket.assigns.joined and socket.assigns.token do
-      Presence.untrack(self(), @topic, socket.assigns.token)
+    if socket.assigns.joined and socket.assigns.indie_id do
+      Presence.untrack(self(), @topic, socket.assigns.indie_id)
     end
 
     updated_socket =
       socket
       |> reset_session_state()
       |> assign(:show_logout_modal, false)
+      |> assign(:game_active, false)
+      |> assign(:current_game_id, nil)
+      |> assign(:current_game_state, nil)
+      |> assign(:player_info, nil)
       |> push_event("clear-all-auth", %{})
       |> put_flash(:info, "Sesión cerrada correctamente")
 
@@ -377,8 +412,8 @@ defmodule IndiesShuffleWeb.LobbyLive do
     IO.puts("🚨 Admin disconnect: #{message}")
 
     # Clean up presence
-    if socket.assigns.joined and socket.assigns.token do
-      Presence.untrack(self(), @topic, socket.assigns.token)
+    if socket.assigns.joined and socket.assigns.indie_id do
+      Presence.untrack(self(), @topic, socket.assigns.indie_id)
     end
 
     {:noreply,
@@ -394,8 +429,8 @@ defmodule IndiesShuffleWeb.LobbyLive do
     IO.puts("🚫 Admin ban: #{message}")
 
     # Clean up presence
-    if socket.assigns.joined and socket.assigns.token do
-      Presence.untrack(self(), @topic, socket.assigns.token)
+    if socket.assigns.joined and socket.assigns.indie_id do
+      Presence.untrack(self(), @topic, socket.assigns.indie_id)
     end
 
     {:noreply,
@@ -428,24 +463,54 @@ defmodule IndiesShuffleWeb.LobbyLive do
         Process.send_after(self(), :update_game_state, 1000)
       end
 
-      # Get initial game state to get correct timer value
-      socket = try do
-        game_state = IndiesShuffle.Game.GameServer.get_state(game_id)
-        assign(socket, finding_team_remaining: game_state.finding_team_remaining || 31_000)
+      # Get initial game state to get correct timer value and phase
+      {game_state, player_info} = try do
+        full_game_state = IndiesShuffle.Game.GameServer.get_state(game_id)
+        player_info = %{
+          player_id: my_indie_id,
+          group_id: my_group.id,
+          group_emoji: my_group.emoji,
+          group_members: my_group.members,
+          leader_id: my_group.leader_id
+        }
+        {full_game_state, player_info}
       catch
         :exit, _ ->
-          assign(socket, finding_team_remaining: 31_000)
+          # Fallback game state
+          fallback_state = %{
+            id: game_id,
+            mode: mode,
+            phase: :finding_team,
+            groups: groups,
+            finding_team_remaining: 31_000
+          }
+          player_info = %{
+            player_id: my_indie_id,
+            group_id: my_group.id,
+            group_emoji: my_group.emoji,
+            group_members: my_group.members,
+            leader_id: my_group.leader_id
+          }
+          {fallback_state, player_info}
       end
 
       {:noreply,
        socket
        |> assign(:game_active, true)
+       |> assign(:current_game_id, game_id)
        |> assign(:game_mode, mode)
+       |> assign(:current_game_state, game_state)
+       |> assign(:player_info, player_info)
        |> assign(:my_group, my_group)
-       |> assign(:_question_pending, my_question)
-       |> assign(:my_question, nil)
-       |> assign(:game_phase, :finding_team)
-       |> assign(:game_id, game_id)}
+       |> assign(:my_question, my_question)
+       |> assign(:game_phase, game_state.phase)
+       |> assign(:finding_team_remaining, game_state.finding_team_remaining || 0)
+       |> push_event("save-game-state", %{
+         game_id: game_id,
+         group_id: my_group.id,
+         game_phase: game_state.phase,
+         mode: mode
+       })}
     else
       IO.puts("⚠️ Player #{my_indie_id} not found in any group")
       {:noreply, socket}
@@ -466,13 +531,35 @@ defmodule IndiesShuffleWeb.LobbyLive do
     end)
 
     if my_group do
+      # Try to get full game state if we have game_id
+      socket = if socket.assigns.current_game_id do
+        try do
+          game_state = IndiesShuffle.Game.GameServer.get_state(socket.assigns.current_game_id)
+
+          player_info = %{
+            player_id: my_indie_id,
+            group_id: my_group.id,
+            group_emoji: my_group.emoji,
+            group_members: my_group.members,
+            leader_id: my_group.leader_id
+          }
+
+          socket
+          |> assign(:current_game_state, game_state)
+          |> assign(:player_info, player_info)
+        catch
+          :exit, _ -> socket
+        end
+      else
+        socket
+      end
+
       {:noreply,
        socket
        |> assign(:game_active, true)
        |> assign(:game_mode, mode)
        |> assign(:my_group, my_group)
-       |> assign(:_question_pending, my_question)
-       |> assign(:my_question, nil)
+       |> assign(:my_question, my_question)
        |> assign(:game_phase, :finding_team)}
     else
       {:noreply, socket}
@@ -486,40 +573,77 @@ defmodule IndiesShuffleWeb.LobbyLive do
 
     {:noreply,
      socket
-     |> assign(:game_active, false)
-     |> assign(:game_mode, nil)
-     |> assign(:my_group, nil)
-     |> assign(:my_question, nil)
-     |> assign(:game_phase, :waiting)
-     |> assign(:game_id, nil)
-     |> assign(:finding_team_remaining, 0)
+     |> assign(:game_phase, :ended)
+     |> push_event("clear-game-state", %{})
      |> put_flash(:info, "El juego ha terminado")}
   end
 
-  # Handle phase change
+  # Handle phase change from game events
+  @impl true
+  def handle_info({:game_event, {:phase_change, new_phase}}, socket) do
+    IO.puts("🎮 Phase changed to: #{new_phase}")
+    IO.puts("📊 Current assigns: game_active=#{socket.assigns.game_active}, game_phase=#{socket.assigns.game_phase}")
+
+    updated_socket = assign(socket, :game_phase, new_phase)
+    IO.puts("📊 Updated game_phase to: #{updated_socket.assigns.game_phase}")
+
+    {:noreply, updated_socket}
+  end
+
+  # Handle phase change (legacy - might be used elsewhere)
   @impl true
   def handle_info({:phase_change, new_phase}, socket) do
     IO.puts("🎮 Phase changed to: #{new_phase}")
 
-    socket = case new_phase do
-      :question ->
-        # When transitioning to question phase, show the pending question
-        pending_question = socket.assigns[:_question_pending]
-        IO.puts("🎮 Showing question: #{pending_question}")
-        assign(socket, my_question: pending_question)
-      _ ->
+    # Fetch updated game state when phase changes
+    socket = if socket.assigns.current_game_id do
+      try do
+        game_state = IndiesShuffle.Game.GameServer.get_state(socket.assigns.current_game_id)
+
+        # Update player info if needed
+        my_indie_id = socket.assigns.indie_id
+        updated_player_info = if my_indie_id && game_state.groups do
+          Enum.find_value(game_state.groups, socket.assigns.player_info, fn group ->
+            member = Enum.find(group.members, &(&1.indie_id == my_indie_id))
+            if member do
+              %{
+                player_id: my_indie_id,
+                group_id: group.id,
+                group_emoji: group.emoji,
+                group_members: group.members,
+                leader_id: group.leader_id
+              }
+            else
+              nil
+            end
+          end)
+        else
+          socket.assigns.player_info
+        end
+
         socket
+        |> assign(:current_game_state, game_state)
+        |> assign(:game_phase, new_phase)
+        |> assign(:player_info, updated_player_info)
+        |> assign(:finding_team_remaining, game_state.finding_team_remaining || 0)
+      catch
+        :exit, _ ->
+          # If can't get state, just update phase
+          assign(socket, game_phase: new_phase)
+      end
+    else
+      assign(socket, game_phase: new_phase)
     end
 
-    {:noreply, assign(socket, game_phase: new_phase)}
+    {:noreply, socket}
   end
 
   # Update game state timer
   @impl true
   def handle_info(:update_game_state, socket) do
-    if socket.assigns.game_active and socket.assigns.game_id do
+    if socket.assigns.game_active and socket.assigns.current_game_id do
       try do
-        game_state = IndiesShuffle.Game.GameServer.get_state(socket.assigns.game_id)
+        game_state = IndiesShuffle.Game.GameServer.get_state(socket.assigns.current_game_id)
 
         # Schedule next update if game is active
         if game_state.phase != :waiting do
@@ -528,6 +652,7 @@ defmodule IndiesShuffleWeb.LobbyLive do
 
         {:noreply,
          socket
+         |> assign(:current_game_state, game_state)
          |> assign(:game_phase, game_state.phase)
          |> assign(:finding_team_remaining, game_state.finding_team_remaining || 0)}
       catch
@@ -552,73 +677,152 @@ defmodule IndiesShuffleWeb.LobbyLive do
     players_count = length(socket.assigns.players)
 
     game_state = cond do
-      players_count < 6 -> :waiting
-      players_count >= 6 and players_count < 48 -> :ready
-      players_count >= 48 -> :full
+      players_count < 1 -> :waiting
+      players_count >= 1 -> :ready
       true -> :waiting
     end
 
-    can_start = players_count >= 6
+    can_start = players_count >= 1
 
     socket
     |> assign(:game_state, game_state)
     |> assign(:can_start_game, can_start)
-    |> assign(:players_needed, max(0, 6 - players_count))
+    |> assign(:players_needed, max(0, 1 - players_count))
+  end
+
+  # This function is now handled by the more comprehensive version below
+
+  defp join_existing_game(socket, game_id, game_state) do
+    player = %{
+      id: socket.assigns.indie_id,
+      indie_id: socket.assigns.indie_id,
+      name: socket.assigns.name || "Usuario"
+    }
+
+    case IndiesShuffle.Game.GameServer.assign_player_to_group(game_id, player) do
+      {:ok, assigned_group} ->
+        IO.puts("🎮 User #{socket.assigns.indie_id} successfully joined game #{game_id} in group #{assigned_group.id}")
+
+        # Subscribe to game events
+        PubSub.subscribe(IndiesShuffle.PubSub, "game:" <> game_id)
+
+        # Create player info
+        player_info = %{
+          player_id: socket.assigns.indie_id,
+          group_id: assigned_group.id,
+          group_emoji: assigned_group.emoji,
+          group_members: assigned_group.members,
+          leader_id: assigned_group.leader_id
+        }
+
+        socket
+        |> assign(:game_active, true)
+        |> assign(:current_game_id, game_id)
+        |> assign(:current_game_state, game_state)
+        |> assign(:player_info, player_info)
+        |> assign(:my_group, assigned_group)
+        |> assign(:my_question, assigned_group.question)
+        |> assign(:game_phase, game_state.phase)
+
+      {:error, reason} ->
+        IO.puts("⚠️ Failed to join game: #{inspect(reason)}")
+        socket
+    end
+  end
+
+  defp find_active_game() do
+    try do
+      case DynamicSupervisor.which_children(IndiesShuffle.GameSupervisor) do
+        [] ->
+          nil
+        children ->
+          Enum.find_value(children, fn
+            {_, pid, :worker, [IndiesShuffle.Game.GameServer]} when is_pid(pid) ->
+              try do
+                Registry.keys(IndiesShuffle.Registry, pid)
+                |> Enum.find_value(fn
+                  {:game, game_id} ->
+                    try do
+                      game_state = IndiesShuffle.Game.GameServer.get_state(game_id)
+                      if game_state.phase != :ended do
+                        {game_id, game_state}
+                      else
+                        nil
+                      end
+                    catch
+                      :exit, _ -> nil
+                    end
+                  _ -> nil
+                end)
+              catch
+                :exit, _ -> nil
+              end
+            _ ->
+              nil
+          end)
+      end
+    catch
+      :exit, _ -> nil
+    end
   end
 
   defp check_and_join_active_game(socket) do
-    # Check if there's an active game by looking for a game process
-    # We'll scan for any active game in the registry
-    case Registry.select(IndiesShuffle.Registry, [{{:_, :_, :_}, [], [:"$_"]}])
-         |> Enum.find(fn {{:game, _game_id}, _pid, _value} -> true; _ -> false end) do
-      {{:game, game_id}, _pid, _value} ->
-        IO.puts("🎮 Active game found: #{game_id}, assigning new player #{socket.assigns.name}")
+    # Only check if user is authenticated and not already in a game
+    if socket.assigns.indie_id && socket.assigns.name && !socket.assigns.game_active do
+      case find_active_game() do
+        {game_id, game_state} ->
+          IO.puts("🎮 LobbyLive: Found active game #{game_id}, attempting to join user #{socket.assigns.indie_id}")
 
-        player = %{
-          id: socket.assigns.indie_id,
-          indie_id: socket.assigns.indie_id,
-          name: socket.assigns.name
-        }
+          player = %{
+            id: socket.assigns.indie_id,
+            indie_id: socket.assigns.indie_id,
+            name: socket.assigns.name
+          }
 
-        case IndiesShuffle.Game.GameServer.assign_player_to_group(game_id, player) do
-          {:ok, assigned_group} ->
-            IO.puts("✅ Player assigned to group #{assigned_group.id}")
+          case IndiesShuffle.Game.GameServer.assign_player_to_group(game_id, player) do
+            {:ok, assigned_group} ->
+              IO.puts("✅ User #{socket.assigns.indie_id} successfully joined game #{game_id} in group #{assigned_group.id}")
 
-            # Subscribe to game events
-            PubSub.subscribe(IndiesShuffle.PubSub, "game:" <> game_id)
+              # Subscribe to game events
+              PubSub.subscribe(IndiesShuffle.PubSub, "game:" <> game_id)
 
-            # Get current game state
-            game_state = try do
-              IndiesShuffle.Game.GameServer.get_state(game_id)
-            catch
-              :exit, _ -> nil
-            end
+              # Create player info
+              player_info = %{
+                player_id: socket.assigns.indie_id,
+                group_id: assigned_group.id,
+                group_emoji: assigned_group.emoji,
+                group_members: assigned_group.members,
+                leader_id: assigned_group.leader_id
+              }
 
-            if game_state do
               # Start timer for updating game state
               Process.send_after(self(), :update_game_state, 1000)
 
               socket
               |> assign(:game_active, true)
-              |> assign(:game_mode, game_state.mode)
+              |> assign(:current_game_id, game_id)
+              |> assign(:current_game_state, game_state)
+              |> assign(:player_info, player_info)
               |> assign(:my_group, assigned_group)
-              |> assign(:_question_pending, assigned_group.question)
-              |> assign(:my_question, if(game_state.phase == :question, do: assigned_group.question, else: nil))
+              |> assign(:my_question, assigned_group.question)
               |> assign(:game_phase, game_state.phase)
-              |> assign(:game_id, game_id)
               |> assign(:finding_team_remaining, game_state.finding_team_remaining || 0)
-            else
+              |> push_event("save-game-state", %{
+                game_id: game_id,
+                group_id: assigned_group.id,
+                game_phase: game_state.phase,
+                mode: game_state.mode
+              })
+
+            {:error, reason} ->
+              IO.puts("⚠️ Failed to join game: #{inspect(reason)}")
               socket
-            end
-
-          _ ->
-            IO.puts("❌ Failed to assign player to group")
-            socket
-        end
-
-      _ ->
-        # No active game, return socket unchanged
-        socket
+          end
+        nil ->
+          socket
+      end
+    else
+      socket
     end
   end
 
@@ -631,9 +835,11 @@ defmodule IndiesShuffleWeb.LobbyLive do
   end
 
   defp track_user_presence(socket) do
-    if socket.assigns.joined and socket.assigns.name do
+    if socket.assigns.joined && socket.assigns.name && socket.assigns.indie_id do
+      # Usar indie_id como clave única en lugar de token
+      # Esto asegura que un usuario solo tenga una entrada en Presence
       {:ok, _} =
-        Presence.track(self(), @topic, socket.assigns.token, %{
+        Presence.track(self(), @topic, socket.assigns.indie_id, %{
           indie_id: socket.assigns.indie_id,
           name: socket.assigns.name,
           token: socket.assigns.token,
@@ -642,17 +848,6 @@ defmodule IndiesShuffleWeb.LobbyLive do
         })
     end
     socket
-  end
-
-  # Buscar si un usuario ya está conectado y obtener su token para evitar duplicados
-  defp find_existing_user_token(indie_id) do
-    Presence.list(@topic)
-    |> Enum.find_value(fn {_token, %{metas: metas}} ->
-      case Enum.find(metas, &(&1.indie_id == indie_id)) do
-        %{token: token} -> token
-        _ -> nil
-      end
-    end)
   end
 
   # Resetear el estado de la sesión al cerrar sesión

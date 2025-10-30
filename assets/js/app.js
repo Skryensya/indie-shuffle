@@ -67,18 +67,7 @@ const hooks = {
       console.log("🔌 AuthChecker montado, verificando autenticación...");
       console.log("🍪 Todas las cookies:", document.cookie);
       
-      // Buscar JWT token en cookie primero (prioridad máxima)
-      const jwtToken = getCookie("indie_jwt_token");
-      console.log("🔐 JWT Token encontrado:", jwtToken ? "SÍ (" + jwtToken.substring(0, 20) + "...)" : "NO");
-      
-      if (jwtToken) {
-        // Enviar JWT para validación al servidor
-        console.log("✅ JWT encontrado, enviando para validación...");
-        this.pushEvent("validate_jwt", { jwt: jwtToken });
-        return;
-      }
-      
-      // Generar o recuperar indie_id persistente
+      // PRIMERO: Siempre generar o recuperar indie_id persistente
       let indieId = localStorage.getItem("persistent_indie_id");
       if (!indieId) {
         // Generar nuevo indie_id persistente
@@ -89,8 +78,19 @@ const hooks = {
         console.log("🆔 Indie_id recuperado:", indieId);
       }
       
-      // Enviar indie_id al servidor
+      // Enviar indie_id al servidor INMEDIATAMENTE
       this.pushEvent("init_indie_id", { indie_id: indieId });
+      
+      // Buscar JWT token en cookie (prioridad secundaria)
+      const jwtToken = getCookie("indie_jwt_token");
+      console.log("🔐 JWT Token encontrado:", jwtToken ? "SÍ (" + jwtToken.substring(0, 20) + "...)" : "NO");
+      
+      if (jwtToken) {
+        // Enviar JWT para validación al servidor
+        console.log("✅ JWT encontrado, enviando para validación...");
+        this.pushEvent("validate_jwt", { jwt: jwtToken });
+        return;
+      }
       
       // Fallback: usar localStorage para migración de usuarios existentes
       const storedName = localStorage.getItem("indies_name");
@@ -159,23 +159,48 @@ window.addEventListener("phx:save-jwt-cookie", (e) => {
   }
 });
 
+// Guardar estado del juego en localStorage
+window.addEventListener("phx:save-game-state", (e) => {
+  const { game_id, group_id, game_phase, mode } = e.detail;
+  console.log("🎮 Guardando estado del juego:", { game_id, group_id, game_phase, mode });
+  
+  const gameState = {
+    game_id,
+    group_id,
+    game_phase,
+    mode,
+    timestamp: Date.now()
+  };
+  
+  localStorage.setItem("indie_game_state", JSON.stringify(gameState));
+  console.log("✅ Estado del juego guardado");
+});
+
+// Limpiar estado del juego
+window.addEventListener("phx:clear-game-state", (e) => {
+  console.log("🧹 Limpiando estado del juego...");
+  localStorage.removeItem("indie_game_state");
+  console.log("✅ Estado del juego limpiado");
+});
+
 // Escuchar eventos para limpiar toda la autenticación
 window.addEventListener("phx:clear-all-auth", (e) => {
-  console.log("🧹 Limpiando autenticación (manteniendo indie_id persistente)...");
+  console.log("🧹 Limpiando TODA la autenticación (incluyendo indie_id)...");
   
   // Limpiar cookies
   deleteCookie("indie_jwt_token");
   
-  // Limpiar localStorage EXCEPTO el indie_id persistente
+  // Limpiar TODO del localStorage - el usuario será completamente nuevo al volver
   localStorage.removeItem("indies_name");
   localStorage.removeItem("indies_id");
   localStorage.removeItem("indies_token");
   localStorage.removeItem("jwt_updated");
-  // NO eliminar "persistent_indie_id" - debe mantenerse
+  localStorage.removeItem("persistent_indie_id"); // ELIMINAR también el ID persistente
+  localStorage.removeItem("indie_game_state"); // ELIMINAR también el estado del juego
   
-  console.log("✅ Autenticación limpiada (indie_id persistente mantenido)");
+  console.log("✅ Toda la autenticación limpiada - usuario será nuevo al regresar");
   console.log("🍪 Cookies después de limpiar:", document.cookie);
-  console.log("🆔 Indie_id persistente:", localStorage.getItem("persistent_indie_id"));
+  console.log("💾 localStorage limpiado completamente");
 });
 
 // Eventos para tokens de admin
@@ -198,8 +223,10 @@ window.addEventListener("phx:clear_admin_token", (e) => {
 window.addEventListener("storage", (e) => {
   if (e.key === "jwt_updated") {
     console.log("🔄 Otra pestaña actualizó el JWT, recargando...");
-    // Recargar la página para usar el nuevo JWT
-    window.location.reload();
+    // Solo recargar si NO estamos en el panel de admin
+    if (!window.location.pathname.startsWith('/admin')) {
+      window.location.reload();
+    }
   }
 });
 

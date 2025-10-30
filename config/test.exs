@@ -22,3 +22,8 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Configure the database for tests
+config :indies_shuffle, IndiesShuffle.Repo,
+  database: "/tmp/indies_shuffle_test.db",
+  pool: Ecto.Adapters.SQL.Sandbox

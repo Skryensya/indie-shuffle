@@ -29,7 +29,11 @@ RUN apk add --no-cache openssl ncurses-libs libstdc++ bash curl wget
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 
+# Create database directory with proper permissions
+RUN mkdir -p /app/db && chown -R app:app /app
+
 COPY --from=build /app/_build/prod/rel/indies_shuffle ./
+RUN chown -R app:app /app
 
 ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000
 

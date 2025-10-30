@@ -99,6 +99,11 @@ if config_env() == :prod do
   #     config :swoosh, :api_client, Swoosh.ApiClient.Req
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  
+  # Database configuration for production
+  config :indies_shuffle, IndiesShuffle.Repo,
+    database: "/app/db/indies_shuffle_prod.db",
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
 end
 
 # Admin credentials for all environments

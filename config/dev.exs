@@ -79,11 +79,7 @@ config :swoosh, :api_client, false
 
 # Configure the database
 config :indies_shuffle, IndiesShuffle.Repo,
-  username: System.get_env("POSTGRES_USER") || "postgres",
-  password: System.get_env("POSTGRES_PASSWORD") || "postgres",
-  hostname: System.get_env("POSTGRES_HOST") || "localhost",
-  database: System.get_env("POSTGRES_DB") || "indies_shuffle_dev",
-  port: String.to_integer(System.get_env("POSTGRES_PORT") || "5432"),
+  database: "/app/db/indies_shuffle_dev.db",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

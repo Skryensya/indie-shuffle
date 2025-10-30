@@ -1,0 +1,245 @@
+<div class="min-h-screen bg-gradient-to-br from-orange-950 via-slate-950 to-slate-900 relative overflow-hidden">
+  <!-- Cover Image -->
+  <div class="fixed inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-screen h-screen object-cover opacity-20" />
+    <!-- Dark overlay -->
+    <div class="absolute inset-0 bg-slate-900/40"></div>
+  </div>
+  
+  <div class="relative z-10 h-screen overflow-y-auto">
+    <!-- Logout Button (only option during active game) -->
+    <div class="fixed top-2 right-2 z-50">
+      <button
+        phx-click="show_logout_modal"
+        class="text-xs text-gray-400 hover:text-gray-200 transition-colors bg-slate-800/50 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-600"
+      >
+        <.icon name="hero-arrow-right-end-on-rectangle" class="w-4 h-4 inline mr-1" />
+        Salir
+      </button>
+    </div>
+
+    <div class="flex items-center justify-center min-h-screen p-3">
+      <div class="max-w-md w-full">
+        <div class="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl p-6 border border-slate-700">
+      <%= if @current_game_state.mode == "together" do %>
+        <!-- Modo Todos Juntos -->
+        <div class="flex flex-col items-center justify-center mb-6">
+          <!-- Emoji grande sin fondo - SOLO UNA VEZ -->
+          <div class="text-9xl mb-4">👥</div>
+          <!-- Texto -->
+          <h2 class="text-2xl font-bold text-white uppercase tracking-wider">
+            Todos Juntos
+          </h2>
+        </div>
+      <% else %>
+        <!-- Modo Grupos -->
+        <div class="flex flex-col items-center justify-center mb-4">
+          <!-- Emoji con círculo de fondo neutro oscuro -->
+          <div class="mb-3 flex items-center justify-center w-24 h-24 rounded-full bg-gray-800 border-2 border-gray-700">
+            <span class="text-5xl">
+              <%= if @player_info, do: @player_info.group_emoji, else: "👥" %>
+            </span>
+          </div>
+          <!-- CTA mejorado -->
+          <h2 class="text-xl font-bold text-white mb-1 uppercase tracking-wider">
+            Busca a tu grupo
+          </h2>
+          <p class="text-orange-400 text-sm font-medium">
+            Encuentra a las personas con este emoji
+          </p>
+        </div>
+      <% end %>
+
+      <!-- Timer de Finding Team (si aplica) -->
+      <!-- Timer -->
+      <%= if @game_phase == :finding_team do %>
+        <div class="relative overflow-hidden bg-orange-500 rounded-xl p-5 shadow-2xl mb-3">
+          <!-- Overlay negro semitransparente -->
+          <div class="absolute inset-0 bg-black/30"></div>
+          
+          <div class="text-center relative z-10">
+            <div class="text-5xl font-black text-white mb-1 drop-shadow-lg">
+              <%= div(@current_game_state.finding_team_remaining || 0, 1000) %>s
+            </div>
+            <p class="text-white text-base font-medium">
+              Tiempo restante
+            </p>
+          </div>
+        </div>
+
+        <!-- Lista compacta de Miembros del Grupo -->
+        <%= if @current_game_state.mode != "together" do %>
+          <div class="bg-slate-800/60 backdrop-blur-sm rounded-lg p-3 border border-slate-600/50">
+            <h3 class="text-xs font-semibold text-white/70 mb-2 text-center uppercase tracking-wide">
+              Tu grupo
+            </h3>
+            <div class="flex flex-wrap gap-1.5 justify-center">
+              <%= if @player_info && @player_info.group_members do %>
+                <%
+                  # Ordenar: usuario primero, luego el resto
+                  sorted_members = @player_info.group_members
+                    |> Enum.sort_by(fn member -> 
+                      if member.indie_id == @player_info.player_id, do: 0, else: 1
+                    end)
+                %>
+                <%= for member <- sorted_members do %>
+                  <div class={[
+                    "px-2.5 py-1 rounded-full text-xs font-medium",
+                    if(member.indie_id == @player_info.player_id, 
+                      do: "bg-orange-500/20 text-orange-300 border border-orange-500/40", 
+                      else: "bg-slate-700/60 text-gray-300 border border-slate-600/50"
+                    )
+                  ]}>
+                    <%= member.name %>
+                  </div>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+
+      <!-- Pregunta (solo visible en fase :question) -->
+      <%= if @current_game_state.phase == :question do %>
+        <%
+          # Get question based on mode and player's group
+          question = cond do
+            # Global question (fallback)
+            @current_game_state.question -> @current_game_state.question
+
+            # Mode "together" - get question from first group
+            @current_game_state.mode == "together" and length(@current_game_state.groups) > 0 ->
+              first_group = List.first(@current_game_state.groups)
+              first_group && Map.get(first_group, :question)
+
+            # Mode "groups" - get question from player's specific group
+            @current_game_state.mode == "groups" and @player_info && @player_info.group_id ->
+              player_group = Enum.find(@current_game_state.groups, fn group ->
+                group.id == @player_info.group_id
+              end)
+              player_group && Map.get(player_group, :question)
+
+            # Default fallback - try first group with a question
+            length(@current_game_state.groups) > 0 ->
+              Enum.find_value(@current_game_state.groups, fn group ->
+                Map.get(group, :question)
+              end)
+
+            true -> nil
+          end
+        %>
+
+        <%= if question do %>
+          <div class="rounded-xl p-5 shadow-2xl mb-3 relative overflow-hidden bg-linear-to-br from-orange-500 via-orange-600 to-slate-900">
+            <!-- Noise overlay -->
+            <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxwYXRoIGQ9Ik0wIDBoMzAwdjMwMEgweiIgZmlsdGVyPSJ1cmwoI2EpIiBvcGFjaXR5PSIuMDUiLz48L3N2Zz4=')] mix-blend-overlay"></div>
+            
+            <div class="text-center relative z-10">
+              <h3 class="text-xl font-bold text-white mb-3 leading-snug drop-shadow-lg text-balance">
+                <%= question %>
+              </h3>
+              <p class="text-orange-100 text-sm font-medium">
+                <%= if @current_game_state.mode == "together" do %>
+                  Discutan esta pregunta todos juntos
+                <% else %>
+                  Discute esta pregunta con tu grupo
+                <% end %>
+              </p>
+            </div>
+          </div>
+
+          <!-- Lista mejorada de Miembros del Grupo -->
+          <%= if @current_game_state.mode != "together" do %>
+            <div class="bg-slate-800/60 backdrop-blur-sm rounded-xl p-5 border border-slate-600/50">
+              <h3 class="text-xs font-bold text-white/80 mb-3 text-center uppercase tracking-wide">
+                Miembros de tu grupo
+              </h3>
+              <div class="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                <%= if @player_info && @player_info.group_members do %>
+                  <%= for member <- @player_info.group_members do %>
+                    <div class="flex items-center justify-between px-4 py-2.5 bg-slate-700/60 rounded-lg border border-slate-600/50 hover:bg-slate-700/80 transition-colors">
+                      <span class="text-base font-medium text-white">
+                        <%= member.name %>
+                      </span>
+                      <%= if member.indie_id == @player_info.player_id do %>
+                        <span class="text-orange-400 text-sm font-semibold px-2 py-0.5 bg-orange-500/10 rounded-full border border-orange-500/20">Tú</span>
+                      <% end %>
+                    </div>
+                  <% end %>
+                <% end %>
+              </div>
+            </div>
+          <% else %>
+            <!-- Lista mejorada de Todos los Participantes -->
+            <div class="bg-slate-800/60 backdrop-blur-sm rounded-xl p-5 border border-slate-600/50">
+              <h3 class="text-xs font-bold text-white/80 mb-3 text-center uppercase tracking-wide">
+                Todos los participantes
+              </h3>
+              <div class="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                <%= for group <- @current_game_state.groups, member <- group.members do %>
+                  <div class="flex items-center justify-between px-4 py-2.5 bg-slate-700/60 rounded-lg border border-slate-600/50 hover:bg-slate-700/80 transition-colors">
+                    <span class="text-base font-medium text-white">
+                      <%= member.name %>
+                    </span>
+                    <%= if @player_info && member.indie_id == @player_info.player_id do %>
+                      <span class="text-orange-400 text-sm font-semibold px-2 py-0.5 bg-orange-500/10 rounded-full border border-orange-500/20">Tú</span>
+                    <% end %>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        <% else %>
+          <!-- Mensaje de espera cuando no hay pregunta -->
+          <div class="bg-linear-to-br from-orange-500 to-gray-900 rounded-xl p-5 shadow-2xl">
+            <div class="text-center">
+              <h3 class="text-xl font-bold text-white mb-2">
+                Preparando pregunta...
+              </h3>
+              <p class="text-orange-100 text-sm font-medium">
+                La pregunta aparecerá en un momento
+              </p>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logout Confirmation Modal -->
+  <%= if @show_logout_modal do %>
+    <div class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+      <.ui_card class="max-w-md bg-slate-900/95 backdrop-blur-md border-slate-700">
+        <.ui_card_content class="text-center p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">¿Salir del juego?</h3>
+          <p class="text-gray-300 mb-6">
+            <%= if @game_active do %>
+              Si sales ahora, serás eliminado del juego activo y perderás tu progreso. ¿Estás seguro?
+            <% else %>
+              ¿Estás seguro de que quieres cerrar sesión?
+            <% end %>
+          </p>
+
+          <div class="flex space-x-3 justify-center">
+            <.ui_button
+              variant="outline"
+              phx-click="hide_logout_modal"
+            >
+              Cancelar
+            </.ui_button>
+            <.ui_button
+              variant="danger"
+              phx-click="confirm_logout"
+            >
+              <.icon name="hero-arrow-right-end-on-rectangle" class="w-4 h-4" />
+              Salir
+            </.ui_button>
+          </div>
+        </.ui_card_content>
+            </.ui_card>
+    </div>
+  <% end %>
+</div>
+```

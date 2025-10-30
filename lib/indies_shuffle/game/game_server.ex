@@ -63,9 +63,11 @@ defmodule IndiesShuffle.Game.GameServer do
   @doc """
   Assigns new questions to all groups and reshuffles groups avoiding previous pairings.
   If specific_question is provided, uses that question for all groups, otherwise random.
+  enable_timer: whether to use the finding team timer
+  enable_regrouping: whether to regroup players or keep current groups
   """
-  def next_question(game_id, specific_question \\ nil) do
-    GenServer.cast(via_tuple(game_id), {:next_question, specific_question})
+  def next_question(game_id, specific_question \\ nil, enable_timer \\ true, enable_regrouping \\ true) do
+    GenServer.cast(via_tuple(game_id), {:next_question, specific_question, enable_timer, enable_regrouping})
   end
 
   @doc """
@@ -187,9 +189,24 @@ defmodule IndiesShuffle.Game.GameServer do
 
   @impl true
   def handle_cast(:end_game, state) do
-    # Broadcast game ended to all players
-    broadcast_game_to_all(state, {:game_ended})
+    # Update state to ended phase
+    new_state = %{state | phase: :ended}
 
+    # Broadcast phase change to :ended
+    broadcast_game_event(new_state.id, {:phase_change, :ended})
+
+    # Broadcast game ended to all players
+    broadcast_game_to_all(new_state, {:game_ended})
+
+    # Schedule cleanup after 60 seconds to allow users to see the end screen
+    Process.send_after(self(), :cleanup_game, 60_000)
+
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info(:cleanup_game, state) do
+    IO.puts("🧹 Cleaning up game #{state.id}")
     {:stop, :normal, state}
   end
 
@@ -295,101 +312,172 @@ defmodule IndiesShuffle.Game.GameServer do
     {:noreply, new_state}
   end
 
+  # Handle old format for backward compatibility
   @impl true
   def handle_cast({:next_question, specific_question}, state) do
-    IO.puts("\n" <> String.duplicate("=", 80))
-    IO.puts("🔄 NEXT QUESTION - REORGANIZING GROUPS!")
-    IO.puts(String.duplicate("=", 80))
+    # Default values for old calls
+    handle_cast({:next_question, specific_question, true, true}, state)
+  end
 
-    # Show current groups BEFORE reorganization
-    IO.puts("\n📋 GRUPOS ANTERIORES:")
-    Enum.each(state.groups, fn group ->
-      member_names = Enum.map(group.members, & &1.name) |> Enum.join(", ")
-      IO.puts("  #{group.emoji} Group #{group.id}: [#{member_names}]")
-    end)
+  @impl true
+  def handle_cast({:next_question, specific_question, enable_timer, enable_regrouping}, state) do
+    # Wrap entire function in try-catch to prevent crashes
+    try do
+      # Reduced logging for better performance
+      IO.puts("🔄 NEXT QUESTION - Reorganizing groups...")
 
-    # Cancel any existing finding team timer
-    if state.finding_team_timer do
-      Process.cancel_timer(state.finding_team_timer)
+      # Cancel any existing finding team timer
+      if state.finding_team_timer do
+        Process.cancel_timer(state.finding_team_timer)
+      end
+
+      # Get current players (those not disconnected)
+      current_players = get_current_players(state)
+      IO.puts("📊 Active players: #{length(current_players)}")
+
+      # If no players, don't proceed
+      if length(current_players) == 0 do
+        IO.puts("⚠️ No active players found, ending game")
+        new_state = %{state | phase: :ended}
+        broadcast_game_event(new_state.id, {:phase_change, :ended})
+        broadcast_game_to_all(new_state, {:game_ended})
+        Process.send_after(self(), :cleanup_game, 60_000)
+        {:noreply, new_state}
+      else
+        # Reshuffle groups avoiding previous pairings (or keep current groups if regrouping disabled)
+        new_groups = if enable_regrouping do
+          case state.mode do
+            "together" ->
+              IO.puts("👥 Mode: Together - All players in one group")
+              # All players in one big group
+              [%{
+                id: "group_all",
+                emoji: "🎯",
+                leader_id: nil,
+                members: current_players,
+                question: nil  # Will be assigned below
+              }]
+            _ ->
+              IO.puts("\n🔀 REORGANIZANDO GRUPOS (evitando parejas anteriores)...")
+              IO.puts("📜 Historial: #{MapSet.size(state.group_history)} parejas registradas")
+              IO.puts("📦 Grupos anteriores: #{length(state.groups)}")
+
+              # Reshuffle into new groups avoiding previous pairings AND previous group assignments
+              new_groups_result = try do
+                # Pass previous groups so players can be rotated to different groups
+                Grouping.regroup_players(current_players, state.group_history, state.groups)
+              rescue
+                error ->
+                  IO.puts("⚠️ Error in regroup_players: #{inspect(error)}")
+                  # Fallback to simple grouping
+                  Grouping.group_players(current_players)
+              end
+
+              IO.puts("✅ #{length(new_groups_result)} new groups created")
+
+              new_groups_result
+              |> Enum.map(fn group ->
+                Map.put(group, :question, nil)  # Will be assigned below
+              end)
+          end
+        else
+          IO.puts("🚫 Reagrupamiento desactivado - manteniendo grupos actuales")
+          # Keep current groups but clear questions
+          state.groups
+          |> Enum.map(fn group ->
+            Map.put(group, :question, nil)  # Will be assigned below
+          end)
+        end
+
+        # Assign questions immediately to groups
+        groups_with_questions = case specific_question do
+          nil ->
+            # Each group gets a random question
+            IO.puts("🎲 Asignando preguntas aleatorias a #{length(new_groups)} grupos")
+            result = Enum.map(new_groups, fn group ->
+              question = Questions.random_question()
+              IO.puts("  📝 Grupo #{group.id}: #{question}")
+              Map.put(group, :question, question)
+            end)
+            result
+          question ->
+            # All groups get the same specific question
+            IO.puts("🎯 Asignando pregunta específica a #{length(new_groups)} grupos: #{question}")
+            result = Enum.map(new_groups, fn group ->
+              IO.puts("  📝 Grupo #{group.id}: #{question}")
+              Map.put(group, :question, question)
+            end)
+            result
+        end
+
+        # Record new group combinations in history (only if regrouping is enabled)
+        new_history = if enable_regrouping do
+          try do
+            record_group_combinations(state.group_history, groups_with_questions)
+          rescue
+            error ->
+              IO.puts("⚠️ Error recording group history: #{inspect(error)}")
+              # Keep existing history if recording fails
+              state.group_history
+          end
+        else
+          # Keep existing history if not regrouping
+          state.group_history
+        end
+
+        # Use timer or skip directly to question phase based on enable_timer
+        {new_phase, timer_ref, finding_team_start} = if enable_timer do
+          IO.puts("⏰ Timer activado - iniciando fase de búsqueda de equipos (31s)")
+          # Start in finding_team phase with 31 second timer (to ensure 30s is visible)
+          start_time = System.system_time(:millisecond)
+          timer = Process.send_after(self(), :start_question_phase, 31_000)
+          {:finding_team, timer, start_time}
+        else
+          IO.puts("🚫 Timer desactivado - saltando DIRECTO a fase :question")
+          # Skip timer, go directly to question phase
+          {:question, nil, nil}
+        end
+
+        IO.puts("📋 Fase establecida: #{new_phase}")
+
+        new_state = %{state |
+          phase: new_phase,
+          groups: groups_with_questions,
+          group_history: new_history,
+          finding_team_timer: timer_ref,
+          finding_team_start_time: finding_team_start
+        }
+
+        # Debug: Log the final state
+        IO.puts("🔍 Estado final del juego:")
+        IO.puts("  📊 Fase: #{new_state.phase}")
+        IO.puts("  📊 Grupos con preguntas:")
+        Enum.each(new_state.groups, fn group ->
+          IO.puts("    - #{group.id}: #{inspect(Map.get(group, :question))}")
+        end)
+
+        # Broadcast new groups with questions
+        IO.puts("\n📢 BROADCASTING nuevos grupos a todos los jugadores...")
+        IO.puts("📢 Enviando fase: #{new_phase}")
+        broadcast_game_to_all(new_state, {:game_started, state.mode, groups_with_questions})
+        broadcast_phase_change(state.id, new_phase)  # Start in the determined phase
+        IO.puts("📢 Phase change broadcasted: #{new_phase}")
+
+        # Also broadcast to lobby so players can redirect to the game (if they disconnected and reconnected)
+        broadcast_to_lobby({:game_started_redirect, state.id, state.mode, groups_with_questions})
+
+        IO.puts("✅ Question reorganization complete!")
+
+        {:noreply, new_state}
+      end
+    rescue
+      error ->
+        IO.puts("💥 CRITICAL ERROR in next_question: #{inspect(error)}")
+        IO.puts("📊 Stack trace: #{inspect(__STACKTRACE__)}")
+        # Broadcast error to admin panel and continue with current state
+        broadcast_game_event(state.id, {:error, "Error durante reorganización: #{inspect(error)}"})
+        {:noreply, state}
     end
-
-    # Get current players (those not disconnected)
-    current_players = get_current_players(state)
-    IO.puts("\n📊 Total de jugadores activos: #{length(current_players)}")
-    IO.puts("   Nombres: #{Enum.map(current_players, & &1.name) |> Enum.join(", ")}")
-
-    # Reshuffle groups avoiding previous pairings
-    new_groups = case state.mode do
-      "together" ->
-        IO.puts("👥 Mode: Together - All players in one group")
-        # All players in one big group
-        [%{
-          id: "group_all",
-          emoji: "🎯",
-          leader_id: nil,
-          members: current_players,
-          question: nil  # Will be assigned below
-        }]
-      _ ->
-        IO.puts("\n🔀 REORGANIZANDO GRUPOS (evitando parejas anteriores)...")
-        IO.puts("📜 Historial: #{MapSet.size(state.group_history)} parejas registradas")
-
-        # Reshuffle into new groups avoiding previous pairings
-        new_groups_result = Grouping.regroup_players(current_players, state.group_history)
-
-        IO.puts("\n✅ NUEVOS GRUPOS CREADOS (#{length(new_groups_result)} grupos):")
-        Enum.each(new_groups_result, fn group ->
-          member_names = Enum.map(group.members, & &1.name) |> Enum.join(", ")
-          IO.puts("  #{group.emoji} Group #{group.id}: [#{member_names}]")
-        end)
-
-        new_groups_result
-        |> Enum.map(fn group ->
-          Map.put(group, :question, nil)  # Will be assigned below
-        end)
-    end
-
-    # Assign questions immediately to groups
-    groups_with_questions = case specific_question do
-      nil ->
-        # Each group gets a random question
-        Enum.map(new_groups, fn group ->
-          Map.put(group, :question, Questions.random_question())
-        end)
-      question ->
-        # All groups get the same specific question
-        Enum.map(new_groups, fn group ->
-          Map.put(group, :question, question)
-        end)
-    end
-
-    # Record new group combinations in history
-    new_history = record_group_combinations(state.group_history, groups_with_questions)
-
-    # Start in finding_team phase with 31 second timer (to ensure 30s is visible)
-    finding_team_start = System.system_time(:millisecond)
-    timer_ref = Process.send_after(self(), :start_question_phase, 31_000)
-
-    new_state = %{state |
-      phase: :finding_team,  # Start with finding team phase
-      groups: groups_with_questions,
-      group_history: new_history,
-      finding_team_timer: timer_ref,
-      finding_team_start_time: finding_team_start
-    }
-
-    # Broadcast new groups with questions
-    IO.puts("\n📢 BROADCASTING nuevos grupos a todos los jugadores...")
-    broadcast_game_to_all(new_state, {:game_started, state.mode, groups_with_questions})
-    broadcast_phase_change(state.id, :finding_team)  # Start in finding_team phase
-
-    # Also broadcast to lobby so players can redirect to the game (if they disconnected and reconnected)
-    broadcast_to_lobby({:game_started_redirect, state.id, state.mode, groups_with_questions})
-
-    IO.puts("✅ Reorganización completa!")
-    IO.puts(String.duplicate("=", 80) <> "\n")
-
-    {:noreply, new_state}
   end
 
   # === Private Helper Functions ===

@@ -1,17 +1,11 @@
 <div class="min-h-screen bg-gradient-to-br from-orange-950 via-slate-950 to-slate-900 relative">
   <!-- Cover Image -->
-  <div class="absolute inset-0 z-0">
-    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+  <div class="fixed inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-screen h-screen object-cover opacity-20" />
     <!-- Dark overlay -->
     <div class="absolute inset-0 bg-slate-900/40"></div>
   </div>
   <div class="relative z-10">
-  <!-- Admin Panel Link (discreto en la esquina superior derecha) -->
-  <div class="fixed top-2 right-2 z-50">
-    <.link navigate="/admin" class="text-xs text-gray-400 hover:text-gray-200 transition-colors">
-      <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-    </.link>
-  </div>
 
   <%= if @checking_auth do %>
     <!-- Loading State -->
@@ -25,6 +19,19 @@
       </.ui_card>
     </.ui_container>
   <% else %>
+    <%= if @game_phase in [:finding_team, :question, :ended] do %>
+      <!-- Game Active or Ended - Show Game Interface -->
+      <%= case @game_phase do %>
+        <% :finding_team -> %>
+          <%= solving(assigns) %>
+        <% :question -> %>
+          <%= solving(assigns) %>
+        <% :ended -> %>
+          <%= ended(assigns) %>
+        <% _ -> %>
+          <%= solving(assigns) %>
+      <% end %>
+    <% else %>
     <%= if !@joined or is_nil(@name) do %>
       <!-- Join Form -->
       <.ui_container class="min-h-screen justify-center">
@@ -59,107 +66,7 @@
         </.ui_card>
       </.ui_container>
     <% else %>
-      <%= if @game_active do %>
-        <!-- Game View -->
-        <div class="min-h-screen flex items-center justify-center relative p-3">
-          <!-- Cover Image Background -->
-          <div class="absolute inset-0 z-0">
-            <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
-            <!-- Dark overlay -->
-            <div class="absolute inset-0 bg-slate-900/40"></div>
-          </div>
-
-          <div class="max-w-3xl w-full max-h-[700px] relative z-10">
-            <div class="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl p-4 border border-slate-700">
-              <!-- Emoji del grupo arriba -->
-              <div class="text-center mb-3">
-                <%= if @game_mode == "together" do %>
-                  <div class="text-6xl">👥</div>
-                <% else %>
-                  <div class="text-6xl"><%= @my_group.emoji %></div>
-                <% end %>
-              </div>
-
-              <!-- Timer de Finding Team (si aplica) -->
-              <%= if @game_phase == :finding_team do %>
-                <div class="bg-gradient-to-br from-orange-500 to-gray-900 rounded-xl shadow-lg mb-3 aspect-[4/3] flex items-center justify-center">
-                  <div class="text-center p-6">
-                    <h3 class="text-2xl font-bold text-white mb-4">
-                      ¡Encuentra a tu equipo!
-                    </h3>
-                    <div class="text-6xl font-bold text-white">
-                      <%= div(@finding_team_remaining || 0, 1000) %>s
-                    </div>
-                  </div>
-                </div>
-              <% end %>
-
-              <!-- Pregunta (solo visible en fase :question) -->
-              <%= if @game_phase == :question do %>
-                <%= if @my_question do %>
-                  <div class="bg-gradient-to-br from-orange-500 to-gray-900 rounded-xl shadow-lg mb-3 aspect-[4/3] flex items-center justify-center">
-                    <div class="text-center p-6">
-                      <h3 class="text-2xl font-bold text-white leading-relaxed">
-                        <%= @my_question %>
-                      </h3>
-                    </div>
-                  </div>
-                <% else %>
-                  <!-- Mensaje de espera cuando no hay pregunta -->
-                  <div class="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg mb-3 aspect-[4/3] flex items-center justify-center">
-                    <div class="text-center p-6">
-                      <div class="text-5xl mb-4">⏳</div>
-                      <h3 class="text-2xl font-bold text-white mb-3">
-                        Preparando pregunta...
-                      </h3>
-                      <p class="text-gray-100 text-sm">
-                        La pregunta aparecerá en un momento
-                      </p>
-                    </div>
-                  </div>
-                <% end %>
-              <% end %>
-
-              <!-- Lista de miembros del grupo (debajo) -->
-              <%
-                # Sort members: current user first, then the rest
-                sorted_members = Enum.sort_by(@my_group.members, fn member ->
-                  if member.indie_id == @indie_id, do: 0, else: 1
-                end)
-              %>
-              <%= if @game_mode == "together" do %>
-                <!-- Todos los Participantes -->
-                <div class="bg-slate-700/80 backdrop-blur-sm rounded-lg p-3 border border-slate-600">
-                  <div class="space-y-1">
-                    <%= for member <- sorted_members do %>
-                      <div class="flex items-center justify-between px-3 py-2 bg-slate-600/60 rounded">
-                        <span class="text-sm font-medium text-gray-100"><%= member.name %></span>
-                        <%= if member.indie_id == @indie_id do %>
-                          <span class="text-xs text-blue-400 font-semibold">(Tú)</span>
-                        <% end %>
-                      </div>
-                    <% end %>
-                  </div>
-                </div>
-              <% else %>
-                <!-- Miembros del Grupo -->
-                <div class="bg-slate-700/80 backdrop-blur-sm rounded-lg p-3 border border-slate-600">
-                  <div class="space-y-1">
-                    <%= for member <- sorted_members do %>
-                      <div class="flex items-center justify-between px-3 py-2 bg-slate-600/60 rounded">
-                        <span class="text-sm font-medium text-gray-100"><%= member.name %></span>
-                        <%= if member.indie_id == @indie_id do %>
-                          <span class="text-xs text-blue-400 font-semibold">(Tú)</span>
-                        <% end %>
-                      </div>
-                    <% end %>
-                  </div>
-                </div>
-              <% end %>
-            </div>
-          </div>
-        </div>
-      <% else %>
+      <!-- Game view now handled entirely by solving/ended templates -->
         <!-- Lobby -->
         <.ui_container class="min-h-screen py-8">
           <!-- User Status Card -->
@@ -171,7 +78,6 @@
                     <.ui_avatar name={@name} size="md" />
                     <div>
                       <h3 class="text-xl font-semibold text-white"><%= @name %></h3>
-                      <.ui_badge variant="success">En línea</.ui_badge>
                     </div>
                   </div>
                   <.ui_button
@@ -223,22 +129,22 @@
                     <span class="text-4xl mb-4 block">⏳</span>
                     <p class="text-lg text-gray-300 mb-2">Esperando más jugadores</p>
                     <p class="text-sm text-gray-400">
-                      Se necesitan <%= @players_needed %> jugador<%= if @players_needed != 1, do: "es" %> más para comenzar
+                      <%= if @players_needed > 0 do %>
+                        Se necesitan <%= @players_needed %> jugador<%= if @players_needed != 1, do: "es" %> más para comenzar
+                      <% else %>
+                        ¡Ya puedes comenzar el juego!
+                      <% end %>
                     </p>
                   </div>
                 <% :ready -> %>
                   <div class="mb-4">
-                    <span class="text-4xl mb-4 block">✅</span>
-                    <p class="text-lg text-green-400 mb-2">¡Listo para comenzar!</p>
-                    <p class="text-sm text-gray-400">Hay suficientes jugadores para empezar el juego</p>
+                    <h3 class="text-2xl font-bold text-white mb-3">Listos para Comenzar</h3>
+                    <p class="text-base text-gray-300 mb-2">
+                      Hay suficientes jugadores conectados. El juego comenzará pronto.
+                    </p>
                   </div>
 
-                  <%= if @can_start_game do %>
-                    <.ui_button variant="primary" class="w-full" phx-click="start_game">
-                      <.icon name="hero-play" class="w-4 h-4" />
-                      Comenzar Juego
-                    </.ui_button>
-                  <% end %>
+                  <!-- Botón de iniciar juego removido - solo admin puede iniciar -->
                 <% :full -> %>
                   <div class="mb-4">
                     <span class="text-4xl mb-4 block">🚫</span>

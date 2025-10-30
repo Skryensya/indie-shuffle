@@ -29,7 +29,7 @@
 
         <!-- Miembros del Grupo -->
         <div class="bg-gray-50 rounded-lg p-3 mb-3">
-          <div class="flex flex-wrap gap-1.5 justify-center">
+          <div class="flex flex-wrap gap-1.5 justify-center max-h-20 overflow-y-auto">
             <%= for member <- @player_info.group_members do %>
               <span class="text-xs px-2 py-1 bg-white rounded border border-gray-200">
                 <%= if member.indie_id == @player_info.leader_id do %><span class="text-sm">👑</span> <% end %><%= member.name %><%= if member.indie_id == @player_info.player_id, do: " (Tú)", else: "" %>

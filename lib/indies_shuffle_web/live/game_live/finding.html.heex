@@ -10,7 +10,7 @@
 
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
           <h4 class="font-semibold text-lg mb-3">Participantes:</h4>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-32 overflow-y-auto">
             <%= for group <- @game_state.groups, member <- group.members do %>
               <div class="flex items-center justify-center bg-white rounded-lg p-3 shadow-sm">
                 <span class="font-medium"><%= member.name %></span>
@@ -39,7 +39,7 @@
 
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
             <h4 class="font-semibold text-lg mb-3">Miembros:</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-32 overflow-y-auto">
               <%= for member <- @player_info.group_members do %>
                 <div class="flex items-center justify-between bg-white rounded-lg p-3 shadow-sm">
                   <span class="font-medium"><%= member.name %></span>

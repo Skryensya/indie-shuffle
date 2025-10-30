@@ -66,7 +66,7 @@ defmodule IndiesShuffle.MixProject do
       {:bandit, "~> 1.5"},
       {:ecto, "~> 3.11"},
       {:ecto_sql, "~> 3.11"},
-      {:postgrex, "~> 0.21"}
+      {:ecto_sqlite3, "~> 0.14"}
     ]
   end
 

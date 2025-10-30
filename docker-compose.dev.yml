@@ -14,11 +14,9 @@ services:
       - deps:/app/deps
       - build:/app/_build
       - node_modules:/app/assets/node_modules
+      - sqlite_data:/app/db
     stdin_open: true
     tty: true
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - internal
     restart: unless-stopped
@@ -29,24 +27,6 @@ services:
       retries: 3
       start_period: 40s
 
-  db:
-    image: postgres:15-alpine
-    env_file:
-      - .env.dev
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - internal
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d indies_shuffle_dev"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
 networks:
   internal:
     driver: bridge
@@ -55,4 +35,4 @@ volumes:
   deps:
   build:
   node_modules:
-  postgres_data:
+  sqlite_data:

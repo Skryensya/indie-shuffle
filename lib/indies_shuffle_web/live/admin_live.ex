@@ -32,7 +32,10 @@ defmodule IndiesShuffleWeb.AdminLive do
            |> assign(current_game_id: nil)
            |> assign(game_in_progress: false)
            |> assign(current_game_state: nil)
-           |> assign(available_questions: IndiesShuffle.Game.Questions.all_questions())}
+           |> assign(available_questions: IndiesShuffle.Game.Questions.all_questions())
+           |> assign(enable_timer: true)
+           |> assign(enable_regrouping: true)
+           |> check_for_active_game()}
         else
           {:ok, assign(socket, admin_authenticated: false, login_form: to_form(%{}))}
         end
@@ -52,7 +55,10 @@ defmodule IndiesShuffleWeb.AdminLive do
          |> assign(current_game_id: nil)
          |> assign(game_in_progress: false)
          |> assign(current_game_state: nil)
-         |> assign(available_questions: IndiesShuffle.Game.Questions.all_questions())}
+         |> assign(available_questions: IndiesShuffle.Game.Questions.all_questions())
+         |> assign(enable_timer: true)
+         |> assign(enable_regrouping: true)
+         |> check_for_active_game()}
       _ ->
         {:ok, assign(socket, admin_authenticated: false, login_form: to_form(%{}))}
     end
@@ -88,6 +94,9 @@ defmodule IndiesShuffleWeb.AdminLive do
        |> assign(game_in_progress: false)
        |> assign(current_game_state: nil)
        |> assign(available_questions: IndiesShuffle.Game.Questions.all_questions())
+       |> assign(enable_timer: true)
+       |> assign(enable_regrouping: true)
+       |> check_for_active_game()
        |> put_flash(:info, "Bienvenido al panel de administración")
        |> push_event("set_admin_token", %{token: token})}
     else
@@ -164,48 +173,80 @@ defmodule IndiesShuffleWeb.AdminLive do
   end
 
   @impl true
+  def handle_event("toggle_timer", _params, socket) do
+    new_timer_state = !socket.assigns.enable_timer
+    {:noreply,
+     socket
+     |> assign(enable_timer: new_timer_state)
+     |> put_flash(:info, "Timer #{if new_timer_state, do: "activado", else: "desactivado"}")}
+  end
+
+  @impl true
+  def handle_event("toggle_regrouping", _params, socket) do
+    new_regrouping_state = !socket.assigns.enable_regrouping
+    {:noreply,
+     socket
+     |> assign(enable_regrouping: new_regrouping_state)
+     |> put_flash(:info, "Reagrupamiento #{if new_regrouping_state, do: "activado", else: "desactivado"}")}
+  end
+
+  @impl true
   def handle_event("start_game", _params, socket) do
     players_count = length(socket.assigns.connected_users)
     game_mode = socket.assigns.game_mode
 
     IO.puts("AdminLive: Attempting to start game with #{players_count} players in mode #{game_mode}")
 
-    if players_count >= 1 do
-      # Generate a unique game ID
-      game_id = generate_game_id()
-      IO.puts("AdminLive: Generated game_id: #{game_id}")
+    # Check if there's already an active game
+    case find_active_game() do
+      {existing_game_id, existing_game_state} ->
+        IO.puts("AdminLive: Game already active: #{existing_game_id}")
+        {:noreply,
+         socket
+         |> assign(current_game_id: existing_game_id)
+         |> assign(game_in_progress: true)
+         |> assign(current_game_state: existing_game_state)
+         |> schedule_game_state_update()
+         |> put_flash(:info, "Ya hay una partida activa: #{existing_game_id}")}
 
-      # Start the game server with mode
-      case DynamicSupervisor.start_child(
-        IndiesShuffle.GameSupervisor,
-        {IndiesShuffle.Game.GameServer, {game_id, game_mode}}
-      ) do
-        {:ok, _pid} ->
-          IO.puts("AdminLive: GameServer started successfully, calling start_game")
-          # Start the game
-          IndiesShuffle.Game.GameServer.start_game(game_id)
-          IO.puts("AdminLive: start_game called successfully")
+      nil ->
+        if players_count >= 1 do
+          # Generate a unique game ID
+          game_id = generate_game_id()
+          IO.puts("AdminLive: Generated game_id: #{game_id}")
 
-          mode_text = if game_mode == "groups", do: "grupos", else: "todos juntos"
+          # Start the game server with mode
+          case DynamicSupervisor.start_child(
+            IndiesShuffle.GameSupervisor,
+            {IndiesShuffle.Game.GameServer, {game_id, game_mode}}
+          ) do
+            {:ok, _pid} ->
+              IO.puts("AdminLive: GameServer started successfully, calling start_game")
+              # Start the game
+              IndiesShuffle.Game.GameServer.start_game(game_id)
+              IO.puts("AdminLive: start_game called successfully")
+
+              mode_text = if game_mode == "groups", do: "grupos", else: "todos juntos"
+              {:noreply,
+               socket
+               |> assign(current_game_id: game_id)
+               |> assign(game_in_progress: true)
+               |> assign(current_game_state: nil)
+               |> schedule_game_state_update()
+               |> put_flash(:info, "¡Partida iniciada con #{players_count} jugadores en modo #{mode_text}!")}
+
+            {:error, reason} ->
+              IO.puts("AdminLive: Error starting GameServer: #{inspect(reason)}")
+              {:noreply,
+               socket
+               |> put_flash(:error, "Error al iniciar la partida: #{inspect(reason)}")}
+          end
+        else
+          IO.puts("AdminLive: Not enough players (#{players_count})")
           {:noreply,
            socket
-           |> assign(current_game_id: game_id)
-           |> assign(game_in_progress: true)
-           |> assign(current_game_state: nil)
-           |> schedule_game_state_update()
-           |> put_flash(:info, "¡Partida iniciada con #{players_count} jugadores en modo #{mode_text}!")}
-
-        {:error, reason} ->
-          IO.puts("AdminLive: Error starting GameServer: #{inspect(reason)}")
-          {:noreply,
-           socket
-           |> put_flash(:error, "Error al iniciar la partida: #{inspect(reason)}")}
-      end
-    else
-      IO.puts("AdminLive: Not enough players (#{players_count})")
-      {:noreply,
-       socket
-       |> put_flash(:error, "Se necesita al menos 1 jugador para empezar")}
+           |> put_flash(:error, "Se necesita al menos 1 jugador para empezar")}
+        end
     end
   end
 
@@ -240,13 +281,31 @@ defmodule IndiesShuffleWeb.AdminLive do
     game_id = socket.assigns.current_game_id
 
     if game_id do
-      case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
-        [{_pid, _}] ->
-          IndiesShuffle.Game.GameServer.next_question(game_id, nil)
-          {:noreply, put_flash(socket, :info, "Nuevos grupos y pregunta aleatoria asignados")}
+      try do
+        case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
+          [{_pid, _}] ->
+            # Use async cast with admin settings
+            :ok = IndiesShuffle.Game.GameServer.next_question(game_id, nil, socket.assigns.enable_timer, socket.assigns.enable_regrouping)
 
-        [] ->
-          {:noreply, put_flash(socket, :error, "Partida no encontrada")}
+            # Schedule state refresh based on timer setting
+            delay = if socket.assigns.enable_timer, do: 2000, else: 500  # Instant refresh if no timer
+            Process.send_after(self(), {:delayed_state_refresh, game_id}, delay)
+
+            message = if socket.assigns.enable_timer do
+              "Reorganizando grupos y asignando nueva pregunta..."
+            else
+              "Asignando nueva pregunta instantáneamente..."
+            end
+
+            {:noreply, put_flash(socket, :info, message)}
+
+          [] ->
+            {:noreply, put_flash(socket, :error, "Partida no encontrada")}
+        end
+      catch
+        :exit, reason ->
+          IO.puts("Error in next_question_random: #{inspect(reason)}")
+          {:noreply, put_flash(socket, :error, "Error al cambiar pregunta - verificando estado del juego...")}
       end
     else
       {:noreply, put_flash(socket, :error, "No hay partida activa")}
@@ -258,13 +317,31 @@ defmodule IndiesShuffleWeb.AdminLive do
     game_id = socket.assigns.current_game_id
 
     if game_id do
-      case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
-        [{_pid, _}] ->
-          IndiesShuffle.Game.GameServer.next_question(game_id, question)
-          {:noreply, put_flash(socket, :info, "Nuevos grupos y pregunta específica asignados")}
+      try do
+        case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
+          [{_pid, _}] ->
+            # Use async cast with admin settings
+            :ok = IndiesShuffle.Game.GameServer.next_question(game_id, question, socket.assigns.enable_timer, socket.assigns.enable_regrouping)
 
-        [] ->
-          {:noreply, put_flash(socket, :error, "Partida no encontrada")}
+            # Schedule state refresh based on timer setting
+            delay = if socket.assigns.enable_timer, do: 2000, else: 500  # Instant refresh if no timer
+            Process.send_after(self(), {:delayed_state_refresh, game_id}, delay)
+
+            message = if socket.assigns.enable_timer do
+              "Reorganizando grupos y asignando pregunta específica..."
+            else
+              "Asignando pregunta específica instantáneamente..."
+            end
+
+            {:noreply, put_flash(socket, :info, message)}
+
+          [] ->
+            {:noreply, put_flash(socket, :error, "Partida no encontrada")}
+        end
+      catch
+        :exit, reason ->
+          IO.puts("Error in next_question_specific: #{inspect(reason)}")
+          {:noreply, put_flash(socket, :error, "Error al cambiar pregunta - verificando estado del juego...")}
       end
     else
       {:noreply, put_flash(socket, :error, "No hay partida activa")}
@@ -276,13 +353,18 @@ defmodule IndiesShuffleWeb.AdminLive do
     game_id = socket.assigns.current_game_id
 
     if game_id do
-      case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
-        [{_pid, _}] ->
-          IndiesShuffle.Game.GameServer.skip_finding_team(game_id)
-          {:noreply, put_flash(socket, :info, "Timer saltado, mostrando pregunta ahora")}
+      try do
+        case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
+          [{_pid, _}] ->
+            IndiesShuffle.Game.GameServer.skip_finding_team(game_id)
+            {:noreply, put_flash(socket, :info, "Timer saltado, mostrando pregunta ahora")}
 
-        [] ->
-          {:noreply, put_flash(socket, :error, "Partida no encontrada")}
+          [] ->
+            {:noreply, put_flash(socket, :error, "Partida no encontrada")}
+        end
+      catch
+        :exit, _ ->
+          {:noreply, put_flash(socket, :error, "Error al saltar timer - partida no disponible")}
       end
     else
       {:noreply, put_flash(socket, :error, "No hay partida activa")}
@@ -325,19 +407,13 @@ defmodule IndiesShuffleWeb.AdminLive do
 
   @impl true
   def handle_event("force_end_game", %{"game_id" => game_id}, socket) do
-    # Send end game message to the game server
-    case Registry.lookup(IndiesShuffle.Registry, {:game, game_id}) do
-      [{pid, _}] ->
-        send(pid, :end_game)
+    # End game using the proper API
+    IndiesShuffle.Game.GameServer.end_game(game_id)
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "Partida #{game_id} terminada forzadamente")
-         |> assign(game_in_progress: false, current_game_id: nil)}
-
-      [] ->
-        {:noreply, put_flash(socket, :error, "Partida no encontrada")}
-    end
+    {:noreply,
+     socket
+     |> put_flash(:info, "Partida #{game_id} terminada forzadamente")
+     |> assign(game_in_progress: false, current_game_id: nil)}
   end
 
   @impl true
@@ -393,28 +469,175 @@ defmodule IndiesShuffleWeb.AdminLive do
     :crypto.strong_rand_bytes(8) |> Base.encode32(case: :lower, padding: false)
   end
 
+  defp check_for_active_game(socket) do
+    case find_active_game() do
+      {game_id, game_state} ->
+        IO.puts("AdminLive: Found active game on mount: #{game_id}")
+        socket
+        |> assign(current_game_id: game_id)
+        |> assign(game_in_progress: true)
+        |> assign(current_game_state: game_state)
+        |> schedule_game_state_update()
+
+      nil ->
+        IO.puts("AdminLive: No active game found")
+        socket
+    end
+  end
+
   defp schedule_game_state_update(socket) do
     Process.send_after(self(), :update_game_state, 1000)
     socket
   end
 
+  # Helper function to find any active game in the registry
+  defp find_active_game() do
+    try do
+      # Use Supervisor to find game processes
+      # Get all children from GameSupervisor
+      case DynamicSupervisor.which_children(IndiesShuffle.GameSupervisor) do
+        [] ->
+          nil
+        children ->
+          # Find the first active game from supervisor children
+          Enum.find_value(children, fn
+            {_, pid, :worker, [IndiesShuffle.Game.GameServer]} when is_pid(pid) ->
+              try do
+                # Get the process info to find the registered name pattern
+                # Look through registry to find this PID
+                Registry.keys(IndiesShuffle.Registry, pid)
+                |> Enum.find_value(fn
+                  {:game, game_id} ->
+                    try do
+                      game_state = IndiesShuffle.Game.GameServer.get_state(game_id)
+                      if game_state.phase != :ended do
+                        {game_id, game_state}
+                      else
+                        nil
+                      end
+                    catch
+                      :exit, _ -> nil
+                    end
+                  _ -> nil
+                end)
+              catch
+                :exit, _ -> nil
+              end
+            _ ->
+              nil
+          end)
+      end
+    catch
+      :exit, _ -> nil
+    end
+  end
+
+  @impl true
+  def handle_info({:delayed_state_refresh, expected_game_id}, socket) do
+    # Handle delayed refresh after next_question operations
+    current_game_id = socket.assigns.current_game_id
+
+    if current_game_id == expected_game_id do
+      try do
+        case Registry.lookup(IndiesShuffle.Registry, {:game, current_game_id}) do
+          [{_pid, _}] ->
+            game_state = IndiesShuffle.Game.GameServer.get_state(current_game_id)
+            {:noreply,
+             socket
+             |> assign(current_game_state: game_state)
+             |> put_flash(:info, "Estado del juego actualizado correctamente")}
+          [] ->
+            # Game not found - try to find any active game
+            case find_active_game() do
+              nil ->
+                {:noreply,
+                 socket
+                 |> assign(game_in_progress: false, current_game_id: nil, current_game_state: nil)
+                 |> put_flash(:error, "La partida ha terminado o no está disponible")}
+              {new_game_id, game_state} ->
+                {:noreply,
+                 socket
+                 |> assign(current_game_id: new_game_id, current_game_state: game_state)
+                 |> put_flash(:info, "Reconectado a juego activo: #{new_game_id}")}
+            end
+        end
+      catch
+        :exit, _ ->
+          # Try to reconnect to any active game
+          case find_active_game() do
+            nil ->
+              {:noreply,
+               socket
+               |> assign(game_in_progress: false, current_game_id: nil, current_game_state: nil)
+               |> put_flash(:warning, "No se pudo reconectar - verificar estado del juego")}
+            {new_game_id, game_state} ->
+              {:noreply,
+               socket
+               |> assign(current_game_id: new_game_id, current_game_state: game_state)
+               |> put_flash(:info, "Reconectado después de reorganización: #{new_game_id}")}
+          end
+      end
+    else
+      # Game ID changed, just continue normal monitoring
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info(:update_game_state, socket) do
     if socket.assigns.game_in_progress and socket.assigns.current_game_id do
-      case Registry.lookup(IndiesShuffle.Registry, {:game, socket.assigns.current_game_id}) do
-        [{_pid, _}] ->
-          game_state = IndiesShuffle.Game.GameServer.get_state(socket.assigns.current_game_id)
-          # Schedule next update
-          Process.send_after(self(), :update_game_state, 1000)
-          {:noreply, assign(socket, current_game_state: game_state)}
-        [] ->
-          # Game ended
-          {:noreply,
-           socket
-           |> assign(game_in_progress: false, current_game_id: nil, current_game_state: nil)}
+      try do
+        case Registry.lookup(IndiesShuffle.Registry, {:game, socket.assigns.current_game_id}) do
+          [{_pid, _}] ->
+            game_state = IndiesShuffle.Game.GameServer.get_state(socket.assigns.current_game_id)
+            # Schedule next update
+            Process.send_after(self(), :update_game_state, 1000)
+            {:noreply, assign(socket, current_game_state: game_state)}
+          [] ->
+            # Game ended - but check if there are other active games we can reconnect to
+            case find_active_game() do
+              nil ->
+                {:noreply,
+                 socket
+                 |> assign(game_in_progress: false, current_game_id: nil, current_game_state: nil)
+                 |> put_flash(:info, "La partida ha terminado")}
+              {game_id, game_state} ->
+                {:noreply,
+                 socket
+                 |> assign(game_in_progress: true, current_game_id: game_id, current_game_state: game_state)
+                 |> put_flash(:info, "Reconectado a partida activa: #{game_id}")
+                 |> schedule_game_state_update()}
+            end
+        end
+      catch
+        :exit, _ ->
+          # Game process crashed - try to find and reconnect to an active game
+          case find_active_game() do
+            nil ->
+              {:noreply,
+               socket
+               |> assign(game_in_progress: false, current_game_id: nil, current_game_state: nil)
+               |> put_flash(:warning, "Conexión perdida - no hay partidas activas")}
+            {game_id, game_state} ->
+              {:noreply,
+               socket
+               |> assign(game_in_progress: true, current_game_id: game_id, current_game_state: game_state)
+               |> put_flash(:info, "Reconectado a partida activa: #{game_id}")
+               |> schedule_game_state_update()}
+          end
       end
     else
-      {:noreply, socket}
+      # Check if there are any active games we can connect to
+      case find_active_game() do
+        nil ->
+          {:noreply, socket}
+        {game_id, game_state} ->
+          {:noreply,
+           socket
+           |> assign(game_in_progress: true, current_game_id: game_id, current_game_state: game_state)
+           |> put_flash(:info, "Partida activa detectada: #{game_id}")
+           |> schedule_game_state_update()}
+      end
     end
   end
 

@@ -1,7 +1,7 @@
 <div class="min-h-screen bg-gradient-to-br from-orange-950 via-slate-950 to-slate-900 relative">
   <!-- Cover Image -->
-  <div class="absolute inset-0 z-0">
-    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+  <div class="fixed inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-screen h-screen object-cover opacity-20" />
     <!-- Dark overlay -->
     <div class="absolute inset-0 bg-slate-900/40"></div>
   </div>
@@ -14,121 +14,98 @@
   <!-- Game Controls -->
   <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700">
     <.ui_card_content>
-      <h2 class="text-xl font-semibold text-white mb-4">🎮 Control de Partidas</h2>
+      <h2 class="text-2xl font-semibold text-white mb-6">🎮 Control de Partidas</h2>
 
       <%= if @game_in_progress do %>
-        <!-- Controles durante el juego -->
-        <div class="bg-green-900/30 border border-green-700/50 rounded-lg p-4 mb-4">
-          <div class="flex items-center justify-between mb-3">
+        <!-- Estado del Juego -->
+        <div class="bg-slate-800/80 rounded-xl p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
             <div>
-              <h3 class="font-semibold text-green-300">Partida en Progreso</h3>
-              <p class="text-sm text-green-400">ID: <%= @current_game_id %></p>
+              <h3 class="text-xl font-bold text-white">Partida Activa</h3>
               <%= if @current_game_state do %>
                 <%= case @current_game_state.phase do %>
                   <% :finding_team -> %>
-                    <p class="text-sm text-orange-400 font-medium">
-                      🔍 Buscando equipos...
-                      <span class="font-mono"><%= div(@current_game_state.finding_team_remaining, 1000) %>s restantes</span>
+                    <p class="text-orange-400 font-medium mt-1">
+                      🔍 Buscando grupos... <%= div(@current_game_state.finding_team_remaining, 1000) %>s
                     </p>
                   <% :question -> %>
-                    <p class="text-sm text-blue-400 font-medium">❓ Discutiendo pregunta</p>
+                    <p class="text-blue-400 font-medium mt-1">❓ Discutiendo pregunta</p>
                   <% _ -> %>
-                    <p class="text-sm text-gray-300">Fase: <%= @current_game_state.phase %></p>
+                    <p class="text-gray-300 mt-1">Estado: <%= @current_game_state.phase %></p>
                 <% end %>
               <% end %>
             </div>
-            <.ui_badge variant="success">Activa</.ui_badge>
+            <.ui_badge variant="success">EN VIVO</.ui_badge>
           </div>
 
-          <!-- Skip finding team timer (solo visible durante finding_team) -->
-          <%= if @current_game_state && @current_game_state.phase == :finding_team do %>
-            <.ui_button
-              variant="secondary"
-              phx-click="skip_finding_team"
-              class="w-full mb-3"
+          <!-- Botones de control -->
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Botón siempre visible para evitar CLS -->
+            <.ui_button 
+              variant="secondary" 
+              phx-click={if @current_game_state && @current_game_state.phase == :finding_team, do: "skip_finding_team", else: nil}
+              class={[
+                "w-full",
+                unless(@current_game_state && @current_game_state.phase == :finding_team, do: "opacity-50 cursor-not-allowed")
+              ]}
+              disabled={!@current_game_state || @current_game_state.phase != :finding_team}
             >
-              <.icon name="hero-forward" class="w-4 h-4" />
-              Saltar Timer y Mostrar Pregunta Ahora
+              ⏩ Mostrar Pregunta
             </.ui_button>
-          <% end %>
-
-          <!-- Siguiente pregunta aleatoria -->
-          <.ui_button
-            variant="primary"
-            phx-click="next_question_random"
-            class="w-full mb-3"
-          >
-            <.icon name="hero-arrow-path" class="w-4 h-4" />
-            Siguiente Pregunta (Aleatoria)
-          </.ui_button>
-
-          <!-- Terminar juego -->
-          <.ui_button
-            variant="danger"
-            phx-click="force_end_game"
-            phx-value-game_id={@current_game_id}
-            class="w-full mb-3"
-            data-confirm="¿Estás seguro de que quieres terminar la partida? Esta acción no se puede deshacer."
-          >
-            <.icon name="hero-stop" class="w-4 h-4" />
-            Terminar Partida
-          </.ui_button>
-
-          <!-- Lista de preguntas -->
-          <div class="bg-slate-700/50 rounded-lg p-4">
-            <h4 class="font-semibold text-white mb-3">O elige una pregunta específica:</h4>
-
-            <div class="space-y-3 max-h-96 overflow-y-auto">
-              <%= for {question, index} <- Enum.with_index(@available_questions) do %>
-                <div class="bg-slate-800 rounded-lg border border-slate-600 p-4">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="flex-1">
-                      <p class="text-gray-100 font-medium leading-relaxed mb-1"><%= question %></p>
-                      <span class="text-orange-400 text-xs">Pregunta #<%= index + 1 %></span>
-                    </div>
-                    <.ui_button
-                      variant="primary"
-                      size="sm"
-                      phx-click="next_question_specific"
-                      phx-value-question={question}
-                      class="shrink-0"
-                    >
-                      <.icon name="hero-play" class="w-4 h-4" />
-                      Seleccionar
-                    </.ui_button>
-                  </div>
-                </div>
-              <% end %>
-            </div>
+            
+            <.ui_button variant="primary" phx-click="next_question_random" class="w-full">
+              🔄 Siguiente Pregunta
+            </.ui_button>
+            
+            <.ui_button
+              variant="danger"
+              phx-click="force_end_game"
+              phx-value-game_id={@current_game_id}
+              class="w-full col-span-2"
+              data-confirm="¿Terminar la partida?"
+            >
+              ⏹️ Terminar Partida
+            </.ui_button>
           </div>
         </div>
 
-        <div class="text-sm text-gray-400 mt-3">
-          <p>Reorganiza grupos evitando repetir compañeros y asigna nueva pregunta</p>
-        </div>
-
-        <!-- Grupos actuales -->
+        <!-- GRUPOS ACTUALES - Vista Principal -->
         <%= if @current_game_state && @current_game_state.groups do %>
-          <div class="bg-slate-700/50 rounded-lg p-4 mt-4">
-            <h4 class="font-semibold text-white mb-3">Grupos Actuales (<%= length(@current_game_state.groups) %>)</h4>
-            <div class="space-y-3">
+          <div class="mb-6">
+            <h3 class="text-2xl font-bold text-white mb-4">👥 Grupos Activos</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for group <- @current_game_state.groups do %>
-                <div class="bg-slate-800 rounded-lg border border-slate-600 p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center space-x-2">
-                      <span class="text-2xl"><%= group.emoji %></span>
-                      <span class="font-semibold text-white">Grupo <%= group.id %></span>
+                <div class="bg-linear-to-br from-slate-800 to-slate-900 rounded-xl p-5 border-2 border-slate-600 hover:border-orange-500 transition-all">
+                  <!-- Header del grupo con emoji -->
+                  <div class="flex items-center gap-3 mb-4 pb-3 border-b border-slate-600">
+                    <div class="text-4xl"><%= group.emoji %></div>
+                    <div class="flex-1">
+                      <div class="text-white font-bold text-lg">Grupo <%= String.replace(group.id, "group_", "") %></div>
+                      <div class="text-gray-400 text-sm"><%= length(group.members) %> integrantes</div>
                     </div>
-                    <span class="text-sm text-gray-400"><%= length(group.members) %> miembros</span>
                   </div>
-                  <div class="space-y-1">
+
+                  <!-- Integrantes -->
+                  <div class="space-y-2 mb-4">
                     <%= for member <- group.members do %>
-                      <div class="flex items-center space-x-2 text-sm text-gray-300">
-                        <div class="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                        <span><%= member.name %></span>
+                      <div class="flex items-center gap-2 text-gray-200 bg-slate-700/50 rounded-lg px-3 py-2">
+                        <div class="w-2 h-2 bg-orange-400 rounded-full"></div>
+                        <span class="text-sm"><%= member.name %></span>
                       </div>
                     <% end %>
                   </div>
+
+                  <!-- Pregunta del grupo -->
+                  <%= if group.question do %>
+                    <div class="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                      <div class="text-orange-400 text-xs font-semibold mb-1">PREGUNTA:</div>
+                      <div class="text-white text-sm font-medium"><%= group.question %></div>
+                    </div>
+                  <% else %>
+                    <div class="bg-slate-700/30 rounded-lg p-3 text-gray-500 text-sm text-center italic">
+                      Sin pregunta asignada
+                    </div>
+                  <% end %>
                 </div>
               <% end %>
             </div>
