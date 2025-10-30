@@ -10,12 +10,8 @@ defmodule IndiesShuffleWeb.GameLive do
     # Initialize with basic game state
     initial_assigns = %{
       game_id: game_id,
-      game_state: %{phase: :waiting, groups: []},
-      player_info: %{player_id: nil, group_id: nil, is_leader: false, group_members: []},
-      my_rules: [],
-      selected_combination: %{figure: nil, color: nil, style: nil},
-      submission_status: nil,
-      error_message: nil,
+      game_state: %{phase: :waiting, mode: "groups", groups: [], question: nil, finding_team_remaining: 0},
+      player_info: %{player_id: nil, group_id: nil, is_leader: false, group_members: [], leader_id: nil},
       indie_id: nil,
       checking_auth: true
     }
@@ -25,87 +21,53 @@ defmodule IndiesShuffleWeb.GameLive do
     if connected?(socket) do
       # Subscribe to game events
       PubSub.subscribe(IndiesShuffle.PubSub, "game:" <> game_id)
+
+      # Get current game state immediately
+      socket = try do
+        game_state = GameServer.get_state(game_id)
+        player_info = get_player_info(socket, game_state)
+        assign(socket, game_state: game_state, player_info: player_info)
+      catch
+        :exit, _ ->
+          # If game doesn't exist, keep initial state
+          IO.puts("GameLive: Game #{game_id} not found on mount, waiting for game to start")
+          socket
+      end
+
       # Set a timeout for auth checking
       Process.send_after(self(), :auth_timeout, 2000)
-    end
+      # Start timer for updating game state
+      Process.send_after(self(), :update_game_state, 1000)
 
-    {:ok, socket}
-  end
-
-  @impl true
-  def handle_event("select_figure", %{"figure" => figure}, socket) do
-    figure_atom = String.to_existing_atom(figure)
-    updated_combination = Map.put(socket.assigns.selected_combination, :figure, figure_atom)
-    {:noreply, assign(socket, selected_combination: updated_combination)}
-  end
-
-  @impl true
-  def handle_event("select_color", %{"color" => color}, socket) do
-    color_atom = String.to_existing_atom(color)
-    updated_combination = Map.put(socket.assigns.selected_combination, :color, color_atom)
-    {:noreply, assign(socket, selected_combination: updated_combination)}
-  end
-
-  @impl true
-  def handle_event("select_style", %{"style" => style}, socket) do
-    style_atom = String.to_existing_atom(style)
-    updated_combination = Map.put(socket.assigns.selected_combination, :style, style_atom)
-    {:noreply, assign(socket, selected_combination: updated_combination)}
-  end
-
-  @impl true
-  def handle_event("submit_answer", _params, socket) do
-    if socket.assigns.player_info.is_leader and 
-       socket.assigns.game_state.phase == :solving and
-       combination_complete?(socket.assigns.selected_combination) do
-      
-      case GameServer.submit_answer(
-        socket.assigns.game_id,
-        socket.assigns.player_info.group_id,
-        socket.assigns.player_info.player_id,
-        socket.assigns.selected_combination
-      ) do
-        {:ok, is_correct} ->
-          status = if is_correct, do: :correct, else: :incorrect
-          socket = assign(socket, submission_status: status)
-          {:noreply, put_flash(socket, :info, "Answer submitted!")}
-        
-        {:error, reason} ->
-          {:noreply, 
-           socket
-           |> assign(error_message: reason)
-           |> put_flash(:error, "Failed to submit: #{reason}")}
-      end
+      {:ok, socket}
     else
-      {:noreply, put_flash(socket, :error, "Cannot submit answer")}
+      {:ok, socket}
     end
-  end
-
-  @impl true
-  def handle_event("reset_combination", _params, socket) do
-    reset_combination = %{figure: nil, color: nil, style: nil}
-    {:noreply, assign(socket, selected_combination: reset_combination)}
   end
 
   @impl true
   def handle_event("init_indie_id", %{"indie_id" => indie_id}, socket) do
     # Get current game state with player context
-    game_state = GameServer.get_state(socket.assigns.game_id)
-    
-    # Update socket with indie_id
     socket = assign(socket, indie_id: indie_id, checking_auth: false)
-    
-    # Determine player's group and role
-    player_info = get_player_info(socket, game_state)
-    
-    # Update socket with game state and player info
-    socket = assign(socket, game_state: game_state, player_info: player_info)
-    
-    # Load player rules if in solving phase
-    socket = if game_state.phase == :solving do
-      load_player_rules(socket)
-    else
+
+    socket = try do
+      game_state = GameServer.get_state(socket.assigns.game_id)
+      # Determine player's group and role
+      player_info = get_player_info(socket, game_state)
+
+      # Update socket with game state and player info
+      socket = assign(socket, game_state: game_state, player_info: player_info)
+
+      # Start updates immediately if game is active
+      if game_state.phase != :waiting do
+        Process.send_after(self(), :update_game_state, 500)
+      end
+
       socket
+    catch
+      :exit, _ ->
+        IO.puts("GameLive: Game not found in init_indie_id, waiting for game_started event")
+        socket
     end
 
     {:noreply, socket}
@@ -113,7 +75,22 @@ defmodule IndiesShuffleWeb.GameLive do
 
   @impl true
   def handle_event("no_auth_data", _params, socket) do
-    {:noreply, assign(socket, checking_auth: false)}
+    # When no auth data, still try to get current game state
+    socket = try do
+      game_state = GameServer.get_state(socket.assigns.game_id)
+      player_info = get_player_info(socket, game_state)
+      assign(socket, game_state: game_state, player_info: player_info, checking_auth: false)
+    catch
+      :exit, _ ->
+        assign(socket, checking_auth: false)
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("return_to_lobby", _params, socket) do
+    {:noreply, push_navigate(socket, to: "/")}
   end
 
   @impl true
@@ -123,21 +100,16 @@ defmodule IndiesShuffleWeb.GameLive do
   end
 
   @impl true
-  def handle_info({:phase_change, new_phase}, socket) do
-    updated_game_state = Map.put(socket.assigns.game_state, :phase, new_phase)
-    socket = assign(socket, game_state: updated_game_state)
-    
-    socket = case new_phase do
-      :solving ->
-        load_player_rules(socket)
-      :scoring ->
-        # Clear any temporary state
-        assign(socket, selected_combination: %{figure: nil, color: nil, style: nil})
-      _ ->
-        socket
+  def handle_info({:phase_change, _new_phase}, socket) do
+    # Get fresh game state when phase changes
+    try do
+      game_state = GameServer.get_state(socket.assigns.game_id)
+      player_info = get_player_info(socket, game_state)
+      {:noreply, assign(socket, game_state: game_state, player_info: player_info)}
+    catch
+      :exit, _ ->
+        {:noreply, socket}
     end
-
-    {:noreply, socket}
   end
 
   @impl true
@@ -151,6 +123,26 @@ defmodule IndiesShuffleWeb.GameLive do
   end
 
   @impl true
+  def handle_info(:update_game_state, socket) do
+    # Get updated game state to show timer
+    try do
+      game_state = GameServer.get_state(socket.assigns.game_id)
+      player_info = get_player_info(socket, game_state)
+
+      # Schedule next update if game is active (not :waiting)
+      if game_state.phase != :waiting do
+        Process.send_after(self(), :update_game_state, 1000)
+      end
+
+      {:noreply, assign(socket, game_state: game_state, player_info: player_info)}
+    catch
+      :exit, _ ->
+        # If game server is down, stop updating
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
   def render(assigns) do
     if assigns.checking_auth do
       checking_auth(assigns)
@@ -158,8 +150,9 @@ defmodule IndiesShuffleWeb.GameLive do
       case assigns.game_state.phase do
         :waiting -> waiting(assigns)
         :finding -> finding(assigns)
-        :solving -> solving(assigns)
-        :scoring -> scoring(assigns)
+        :finding_team -> solving(assigns)  # Use solving template to show timer in question space
+        :question -> solving(assigns)  # Reusing solving template for question display
+        :ended -> ended(assigns)  # Show thank you screen
         _ -> waiting(assigns)
       end
     end
@@ -169,7 +162,7 @@ defmodule IndiesShuffleWeb.GameLive do
 
   defp get_player_info(socket, game_state) do
     player_id = get_player_id(socket)
-    
+
     # Find player's group
     player_group = Enum.find(game_state.groups, fn group ->
       Enum.any?(group.members, &(&1.indie_id == player_id))
@@ -177,21 +170,38 @@ defmodule IndiesShuffleWeb.GameLive do
 
     case player_group do
       nil ->
+        # If player is not in a group yet, try to find them in any group for emoji
+        group_emoji = case game_state.groups do
+          [] -> "🔍"  # Default emoji if no groups exist yet
+          groups ->
+            # Try to find if player has an assigned emoji from any group member data
+            found_emoji = groups
+            |> Enum.flat_map(& &1.members)
+            |> Enum.find(&(&1.indie_id == player_id))
+            |> case do
+              nil -> List.first(groups).emoji  # Use first group's emoji as fallback
+              _member -> List.first(groups).emoji  # Use group's emoji
+            end
+            found_emoji || "🔍"
+        end
+
         %{
           player_id: player_id,
           group_id: nil,
-          group_emoji: nil,
+          group_emoji: group_emoji,
           is_leader: false,
-          group_members: []
+          group_members: [],
+          leader_id: nil
         }
-      
+
       group ->
         %{
           player_id: player_id,
           group_id: group.id,
           group_emoji: group.emoji,
           is_leader: group.leader_id == player_id,
-          group_members: group.members
+          group_members: group.members,
+          leader_id: group.leader_id
         }
     end
   end
@@ -205,72 +215,45 @@ defmodule IndiesShuffleWeb.GameLive do
     end
   end
 
-  defp load_player_rules(socket) do
-    rules = GameServer.get_player_rules(socket.assigns.game_id, socket.assigns.player_info.player_id)
-    assign(socket, my_rules: rules)
-  end
-
-  defp combination_complete?(%{figure: figure, color: color, style: style}) do
-    not is_nil(figure) and not is_nil(color) and not is_nil(style)
-  end
-
   defp handle_game_event(socket, event) do
-    case event do
-      {:answer_submitted, group_id, is_correct} ->
-        if group_id == socket.assigns.player_info.group_id do
-          status = if is_correct, do: :correct, else: :incorrect
-          assign(socket, submission_status: status)
-        else
+    try do
+      case event do
+        {:game_started, _mode, _groups} ->
+          # Get fresh game state instead of manually updating
+          game_state = GameServer.get_state(socket.assigns.game_id)
+          player_info = get_player_info(socket, game_state)
+          assign(socket, game_state: game_state, player_info: player_info)
+
+        {:questions_revealed, _groups_with_questions} ->
+          # When questions are revealed after finding_team timer (legacy)
+          game_state = GameServer.get_state(socket.assigns.game_id)
+          player_info = get_player_info(socket, game_state)
+          assign(socket, game_state: game_state, player_info: player_info)
+
+        {:game_ended} ->
+          # Show thank you screen instead of redirecting immediately
+          game_state = Map.put(socket.assigns.game_state, :phase, :ended)
+          assign(socket, game_state: game_state)
+
+        {:player_disconnected, _player_id} ->
+          # Refresh game state to update group information
+          game_state = GameServer.get_state(socket.assigns.game_id)
+          player_info = get_player_info(socket, game_state)
+          assign(socket, game_state: game_state, player_info: player_info)
+
+        {:phase_change, _new_phase} ->
+          # Refresh complete game state on phase change
+          game_state = GameServer.get_state(socket.assigns.game_id)
+          player_info = get_player_info(socket, game_state)
+          assign(socket, game_state: game_state, player_info: player_info)
+
+        _ ->
           socket
-        end
-
-      {:final_scores, scores, secret} ->
-        socket
-        |> assign(scores: scores)
-        |> assign(secret: secret)
-
-      {:player_disconnected, _player_id} ->
-        # Refresh game state to update group information
-        game_state = GameServer.get_state(socket.assigns.game_id)
-        assign(socket, game_state: game_state)
-
-      _ ->
+      end
+    catch
+      :exit, _ ->
+        IO.puts("GameLive: Error getting game state in handle_game_event")
         socket
     end
   end
-
-
-  defp get_figure_emoji(figure) do
-    case figure do
-      :circle -> "●"
-      :square -> "■"
-      :triangle -> "▲"
-      :diamond -> "♦"
-      :star -> "★"
-      :hexagon -> "⬢"
-      _ -> "?"
-    end
-  end
-
-  defp get_color_class(color) do
-    case color do
-      :red -> "text-red-500"
-      :blue -> "text-blue-500"
-      :green -> "text-green-500"
-      :yellow -> "text-yellow-500"
-      :purple -> "text-purple-500"
-      :orange -> "text-orange-500"
-      _ -> "text-gray-500"
-    end
-  end
-
-  defp get_style_class(style) do
-    case style do
-      :filled -> ""
-      :outline -> "filter-outline"
-      :dashed -> "filter-dashed"
-      _ -> ""
-    end
-  end
-
 end

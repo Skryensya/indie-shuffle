@@ -1,37 +1,239 @@
-<div class="min-h-screen relative">
+<div class="min-h-screen bg-gradient-to-br from-orange-950 via-slate-950 to-slate-900 relative">
   <!-- Cover Image -->
   <div class="absolute inset-0 z-0">
     <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+    <!-- Dark overlay -->
+    <div class="absolute inset-0 bg-slate-900/40"></div>
   </div>
   <div class="relative z-10 container mx-auto px-4 py-8">
   <!-- Header -->
   <div class="flex justify-between items-center mb-8">
-    <h1 class="text-4xl font-bold">Panel de Administración</h1>
+    <h1 class="text-4xl font-bold text-white">Panel de Administración</h1>
   </div>
 
   <!-- Game Controls -->
-  <.ui_card>
+  <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700">
     <.ui_card_content>
-      <h2 class="text-xl font-semibold text-gray-900 mb-4">🎮 Control de Partidas</h2>
-      
-      <div class="flex items-center space-x-4 mb-4">
-        <.ui_button 
-          variant="primary"
-          phx-click="start_game" 
-          disabled={length(@connected_users) < 4}
+      <h2 class="text-xl font-semibold text-white mb-4">🎮 Control de Partidas</h2>
+
+      <%= if @game_in_progress do %>
+        <!-- Controles durante el juego -->
+        <div class="bg-green-900/30 border border-green-700/50 rounded-lg p-4 mb-4">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="font-semibold text-green-300">Partida en Progreso</h3>
+              <p class="text-sm text-green-400">ID: <%= @current_game_id %></p>
+              <%= if @current_game_state do %>
+                <%= case @current_game_state.phase do %>
+                  <% :finding_team -> %>
+                    <p class="text-sm text-orange-400 font-medium">
+                      🔍 Buscando equipos...
+                      <span class="font-mono"><%= div(@current_game_state.finding_team_remaining, 1000) %>s restantes</span>
+                    </p>
+                  <% :question -> %>
+                    <p class="text-sm text-blue-400 font-medium">❓ Discutiendo pregunta</p>
+                  <% _ -> %>
+                    <p class="text-sm text-gray-300">Fase: <%= @current_game_state.phase %></p>
+                <% end %>
+              <% end %>
+            </div>
+            <.ui_badge variant="success">Activa</.ui_badge>
+          </div>
+
+          <!-- Skip finding team timer (solo visible durante finding_team) -->
+          <%= if @current_game_state && @current_game_state.phase == :finding_team do %>
+            <.ui_button
+              variant="secondary"
+              phx-click="skip_finding_team"
+              class="w-full mb-3"
+            >
+              <.icon name="hero-forward" class="w-4 h-4" />
+              Saltar Timer y Mostrar Pregunta Ahora
+            </.ui_button>
+          <% end %>
+
+          <!-- Siguiente pregunta aleatoria -->
+          <.ui_button
+            variant="primary"
+            phx-click="next_question_random"
+            class="w-full mb-3"
+          >
+            <.icon name="hero-arrow-path" class="w-4 h-4" />
+            Siguiente Pregunta (Aleatoria)
+          </.ui_button>
+
+          <!-- Terminar juego -->
+          <.ui_button
+            variant="danger"
+            phx-click="force_end_game"
+            phx-value-game_id={@current_game_id}
+            class="w-full mb-3"
+            data-confirm="¿Estás seguro de que quieres terminar la partida? Esta acción no se puede deshacer."
+          >
+            <.icon name="hero-stop" class="w-4 h-4" />
+            Terminar Partida
+          </.ui_button>
+
+          <!-- Lista de preguntas -->
+          <div class="bg-slate-700/50 rounded-lg p-4">
+            <h4 class="font-semibold text-white mb-3">O elige una pregunta específica:</h4>
+
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+              <%= for {question, index} <- Enum.with_index(@available_questions) do %>
+                <div class="bg-slate-800 rounded-lg border border-slate-600 p-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1">
+                      <p class="text-gray-100 font-medium leading-relaxed mb-1"><%= question %></p>
+                      <span class="text-orange-400 text-xs">Pregunta #<%= index + 1 %></span>
+                    </div>
+                    <.ui_button
+                      variant="primary"
+                      size="sm"
+                      phx-click="next_question_specific"
+                      phx-value-question={question}
+                      class="shrink-0"
+                    >
+                      <.icon name="hero-play" class="w-4 h-4" />
+                      Seleccionar
+                    </.ui_button>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-sm text-gray-400 mt-3">
+          <p>Reorganiza grupos evitando repetir compañeros y asigna nueva pregunta</p>
+        </div>
+
+        <!-- Grupos actuales -->
+        <%= if @current_game_state && @current_game_state.groups do %>
+          <div class="bg-slate-700/50 rounded-lg p-4 mt-4">
+            <h4 class="font-semibold text-white mb-3">Grupos Actuales (<%= length(@current_game_state.groups) %>)</h4>
+            <div class="space-y-3">
+              <%= for group <- @current_game_state.groups do %>
+                <div class="bg-slate-800 rounded-lg border border-slate-600 p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-2xl"><%= group.emoji %></span>
+                      <span class="font-semibold text-white">Grupo <%= group.id %></span>
+                    </div>
+                    <span class="text-sm text-gray-400"><%= length(group.members) %> miembros</span>
+                  </div>
+                  <div class="space-y-1">
+                    <%= for member <- group.members do %>
+                      <div class="flex items-center space-x-2 text-sm text-gray-300">
+                        <div class="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                        <span><%= member.name %></span>
+                      </div>
+                    <% end %>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      <% else %>
+        <!-- Controles antes del juego -->
+        <!-- Game Mode Selection -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-200 mb-2">Modo de Juego</label>
+          <div class="flex gap-4">
+            <label class="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="game_mode"
+                value="groups"
+                checked={@game_mode == "groups"}
+                phx-click="select_mode"
+                phx-value-mode="groups"
+                class="mr-2"
+              />
+              <span class="text-sm text-gray-100">
+                <strong>Grupos Separados</strong> - Dividir en grupos de 1-6 personas
+              </span>
+            </label>
+
+            <label class="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="game_mode"
+                value="together"
+                checked={@game_mode == "together"}
+                phx-click="select_mode"
+                phx-value-mode="together"
+                class="mr-2"
+              />
+              <span class="text-sm text-gray-100">
+                <strong>Todos Juntos</strong> - Una pregunta para todos sin dividir
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-4 mb-4">
+          <.ui_button
+            variant="primary"
+            phx-click="start_game"
+            disabled={length(@connected_users) < 1}
+          >
+            <.icon name="hero-play" class="w-4 h-4" />
+            Iniciar Partida
+          </.ui_button>
+
+          <span class="text-sm text-gray-300">
+            Jugadores conectados: <%= length(@connected_users) %>
+            (mínimo 1 requerido)
+          </span>
+        </div>
+
+        <div class="text-sm text-gray-400">
+          <p>• Inicia una nueva sesión con todos los jugadores conectados</p>
+          <p>• Los jugadores verán la pregunta en su misma pantalla</p>
+        </div>
+      <% end %>
+    </.ui_card_content>
+  </.ui_card>
+
+  <!-- Mock Users Control -->
+  <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700 mt-8">
+    <.ui_card_content>
+      <h2 class="text-xl font-semibold text-white mb-4">🤖 Usuarios Mock (Testing)</h2>
+      <p class="text-sm text-gray-400 mb-4">Crea usuarios ficticios para probar el sistema con carga</p>
+
+      <div class="space-y-3">
+        <.form for={%{}} phx-submit="create_mock_users" class="flex gap-2">
+          <.ui_input
+            name="count"
+            type="number"
+            min="1"
+            max="1000"
+            placeholder="Cantidad (1-1000)"
+            class="flex-1 bg-slate-700 border-slate-600 text-white placeholder:text-gray-400"
+            required
+          />
+          <.ui_button type="submit" variant="primary">
+            <.icon name="hero-users" class="w-4 h-4" />
+            Crear Mock Users
+          </.ui_button>
+        </.form>
+
+        <.ui_button
+          variant="danger"
+          phx-click="clear_mock_users"
+          class="w-full"
+          data-confirm="¿Estás seguro de eliminar todos los usuarios mock?"
         >
-          Iniciar Partida
+          <.icon name="hero-trash" class="w-4 h-4" />
+          Eliminar Todos los Mock Users
         </.ui_button>
-        
-        <span class="text-sm text-gray-600">
-          Jugadores conectados: <%= length(@connected_users) %> 
-          (mínimo 4 requeridos)
-        </span>
       </div>
-      
-      <div class="text-sm text-gray-500">
-        <p>• Inicia una nueva partida de combinaciones con todos los jugadores conectados</p>
-        <p>• Los jugadores serán redirigidos automáticamente al juego</p>
+
+      <div class="mt-4 bg-slate-700/50 rounded-lg p-3">
+        <p class="text-xs text-gray-300">
+          💡 Los usuarios mock aparecerán en la lista de jugadores conectados y se unirán automáticamente al juego.
+        </p>
       </div>
     </.ui_card_content>
   </.ui_card>
@@ -39,66 +241,66 @@
   <!-- Dashboard Grid -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 mt-8">
     <!-- Stats Cards -->
-    <.ui_card>
+    <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700">
       <.ui_card_content>
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-lg font-semibold text-gray-900">Usuarios Conectados</h3>
+          <h3 class="text-lg font-semibold text-white">Usuarios Conectados</h3>
           <.ui_badge variant="success">Online</.ui_badge>
         </div>
-        <p class="text-3xl font-bold text-green-600"><%= length(@connected_users) %></p>
-        <p class="text-sm text-gray-600">En línea ahora</p>
+        <p class="text-3xl font-bold text-green-400"><%= length(@connected_users) %></p>
+        <p class="text-sm text-gray-300">En línea ahora</p>
       </.ui_card_content>
     </.ui_card>
 
-    <.ui_card>
+    <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700">
       <.ui_card_content>
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-lg font-semibold text-gray-900">Usuarios Baneados</h3>
+          <h3 class="text-lg font-semibold text-white">Usuarios Baneados</h3>
           <.ui_badge variant="danger">Banned</.ui_badge>
         </div>
-        <p class="text-3xl font-bold text-red-600"><%= length(@banned_users) %></p>
-        <p class="text-sm text-gray-600">Total baneados</p>
+        <p class="text-3xl font-bold text-red-400"><%= length(@banned_users) %></p>
+        <p class="text-sm text-gray-300">Total baneados</p>
       </.ui_card_content>
     </.ui_card>
 
-    <.ui_card>
+    <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700">
       <.ui_card_content>
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-lg font-semibold text-gray-900">Sistema</h3>
+          <h3 class="text-lg font-semibold text-white">Sistema</h3>
           <.ui_badge variant="info">Active</.ui_badge>
         </div>
-        <p class="text-3xl font-bold text-blue-600">OK</p>
-        <p class="text-sm text-gray-600">Estado del servidor</p>
+        <p class="text-3xl font-bold text-blue-400">OK</p>
+        <p class="text-sm text-gray-300">Estado del servidor</p>
       </.ui_card_content>
     </.ui_card>
   </div>
 
   <!-- Users Management Table -->
-  <.ui_card>
+  <.ui_card class="bg-slate-900/95 backdrop-blur-md border-slate-700">
     <.ui_card_content>
-      <h2 class="text-2xl font-bold text-gray-900 mb-4">Gestión de Usuarios</h2>
+      <h2 class="text-2xl font-bold text-white mb-4">Gestión de Usuarios</h2>
       <%= if @connected_users == [] and @banned_users == [] do %>
-        <div class="text-center py-8 text-gray-500">
+        <div class="text-center py-8 text-gray-400">
           <span class="text-4xl mb-4 block">👻</span>
           <p>No hay usuarios registrados</p>
         </div>
       <% else %>
         <div class="overflow-x-auto">
           <table class="w-full">
-            <thead class="bg-white/80 backdrop-blur-md">
-              <tr class="border-b border-gray-200">
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">Estado</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">Usuario</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">ID</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">Grupo</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">Acciones</th>
+            <thead class="bg-slate-700/50 backdrop-blur-md">
+              <tr class="border-b border-slate-600">
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-slate-600">Estado</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-slate-600">Usuario</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-slate-600">ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-slate-600">Grupo</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-b border-slate-600">Acciones</th>
               </tr>
             </thead>
             <tbody class="bg-transparent">
               <!-- Connected Users First -->
               <%= for user <- @connected_users do %>
-                <tr class={["border-b border-gray-100", user.is_banned && "bg-red-50/30"]}>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
+                <tr class={["border-b border-slate-600", user.is_banned && "bg-red-900/20"]}>
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
                     <%= if user.is_banned do %>
                       <.ui_badge variant="danger">BANEADO</.ui_badge>
                     <% else %>
@@ -108,24 +310,29 @@
                       </div>
                     <% end %>
                   </td>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
-                    <div class="text-sm font-medium text-gray-900">
-                      <%= user.name || "Usuario sin nombre" %>
-                    </div>
-                  </td>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
-                    <div class="text-sm text-gray-600"><%= user.indie_id %></div>
-                  </td>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
-                    <div class="text-sm text-gray-600">
-                      <%= if assigns[:game_in_progress] do %>
-                        <.ui_badge variant="info">Grupo <%= user.group || "Sin asignar" %></.ui_badge>
-                      <% else %>
-                        <span class="text-gray-400">-</span>
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-sm font-medium text-gray-100">
+                        <%= user.name || "Usuario sin nombre" %>
+                      </span>
+                      <%= if Map.get(user, :is_mock, false) do %>
+                        <span class="text-xs bg-purple-600 text-white px-2 py-0.5 rounded">MOCK</span>
                       <% end %>
                     </div>
                   </td>
-                  <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-gray-100">
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
+                    <div class="text-sm text-gray-300"><%= user.indie_id %></div>
+                  </td>
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
+                    <div class="text-sm text-gray-300">
+                      <%= if @game_in_progress do %>
+                        <.ui_badge variant="info">En juego</.ui_badge>
+                      <% else %>
+                        <span class="text-gray-500">-</span>
+                      <% end %>
+                    </div>
+                  </td>
+                  <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-slate-600">
                     <div class="flex gap-2">
                       <%= if user.is_banned do %>
                         <.ui_button 
@@ -165,30 +372,30 @@
               
               <!-- Banned Users at the End -->
               <%= for banned <- @banned_users do %>
-                <tr class="border-b border-gray-100 bg-red-50/30">
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
+                <tr class="border-b border-slate-600 bg-red-900/20">
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
                     <.ui_badge variant="danger">BANEADO</.ui_badge>
                   </td>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
-                    <div class="text-sm font-medium text-red-700">Usuario Baneado</div>
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
+                    <div class="text-sm font-medium text-red-300">Usuario Baneado</div>
                   </td>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
-                    <div class="text-sm text-gray-600"><%= banned.indie_id %></div>
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
+                    <div class="text-sm text-gray-300"><%= banned.indie_id %></div>
                   </td>
-                  <td class="px-4 py-4 whitespace-nowrap border-b border-gray-100">
-                    <span class="text-gray-400">-</span>
+                  <td class="px-4 py-4 whitespace-nowrap border-b border-slate-600">
+                    <span class="text-gray-500">-</span>
                   </td>
-                  <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-gray-100">
-                    <.ui_button 
-                      variant="primary" 
+                  <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-slate-600">
+                    <.ui_button
+                      variant="primary"
                       size="sm"
-                      phx-click="unban_user" 
+                      phx-click="unban_user"
                       phx-value-indie_id={banned.indie_id}
                       data-confirm="¿Estás seguro de desbanear a este usuario?"
                     >
                       Desbanear
                     </.ui_button>
-                    <div class="text-xs text-gray-500 mt-1">
+                    <div class="text-xs text-gray-400 mt-1">
                       Baneado: <%= Calendar.strftime(banned.banned_at, "%d/%m/%Y %H:%M") %>
                     </div>
                   </td>

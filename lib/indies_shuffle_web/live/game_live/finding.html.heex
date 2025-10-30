@@ -1,55 +1,94 @@
 <div class="max-w-4xl mx-auto p-6">
   <div class="bg-white rounded-lg shadow-lg p-8">
-    <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">🕵️ Find Your Team</h2>
-    
-    <%= if @player_info.group_id do %>
+    <%= if @game_state.mode == "together" do %>
+      <!-- Modo Todos Juntos -->
+      <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">👥 Todos Juntos</h2>
+
       <div class="text-center mb-8">
-        <div class="text-8xl mb-4"><%= @player_info.group_emoji %></div>
-        <h3 class="text-2xl font-semibold text-gray-700 mb-4">Your Group</h3>
-        
+        <div class="text-8xl mb-4">🎯</div>
+        <h3 class="text-2xl font-semibold text-gray-700 mb-4">Una Pregunta para Todos</h3>
+
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-          <h4 class="font-semibold text-lg mb-3">Team Members:</h4>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <%= for member <- @player_info.group_members do %>
-              <div class="flex items-center justify-between bg-white rounded-lg p-3 shadow-sm">
+          <h4 class="font-semibold text-lg mb-3">Participantes:</h4>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <%= for group <- @game_state.groups, member <- group.members do %>
+              <div class="flex items-center justify-center bg-white rounded-lg p-3 shadow-sm">
                 <span class="font-medium"><%= member.name %></span>
                 <%= if member.indie_id == @player_info.player_id do %>
-                  <span class="text-blue-600 font-semibold">(You)</span>
-                <% end %>
-                <%= if @player_info.is_leader and member.indie_id == @player_info.player_id do %>
-                  <span class="text-yellow-600 font-semibold">👑 Leader</span>
-                <% else %>
-                  <%= if member.indie_id == (@player_info.group_members |> Enum.find(&(&1.indie_id == @player_info.leader_id), %{}) |> Map.get(:indie_id)) do %>
-                    <span class="text-yellow-600 font-semibold">👑</span>
-                  <% end %>
+                  <span class="text-blue-600 font-semibold ml-2">(Tú)</span>
                 <% end %>
               </div>
             <% end %>
           </div>
         </div>
-        
-        <%= if @player_info.is_leader do %>
-          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <p class="text-yellow-800 font-semibold">
-              👑 You are the team leader! You'll be responsible for submitting the final answer.
-            </p>
-          </div>
-        <% end %>
-        
+
         <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <p class="text-gray-700">
-            Get to know your teammates! In the next phase, you'll work together to solve a puzzle.
-            Each team member will have different clues, so communication is key!
+            En un momento verán una pregunta para discutir entre todos. ¡Prepárense para compartir sus ideas!
           </p>
         </div>
       </div>
     <% else %>
-      <div class="text-center">
-        <div class="text-6xl mb-4">🔄</div>
-        <p class="text-lg text-gray-600">
-          Assigning you to a group...
-        </p>
-      </div>
+      <!-- Modo Grupos -->
+      <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">🕵️ Tu Grupo</h2>
+
+      <%= if @player_info.group_id do %>
+        <div class="text-center mb-8">
+          <div class="text-8xl mb-4"><%= @player_info.group_emoji %></div>
+          <h3 class="text-2xl font-semibold text-gray-700 mb-4">Tu Grupo</h3>
+
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <h4 class="font-semibold text-lg mb-3">Miembros:</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <%= for member <- @player_info.group_members do %>
+                <div class="flex items-center justify-between bg-white rounded-lg p-3 shadow-sm">
+                  <span class="font-medium"><%= member.name %></span>
+                  <%= if member.indie_id == @player_info.player_id do %>
+                    <span class="text-blue-600 font-semibold">(Tú)</span>
+                  <% end %>
+                  <%= if @player_info.is_leader and member.indie_id == @player_info.player_id do %>
+                    <span class="text-yellow-600 font-semibold">👑 Líder</span>
+                  <% else %>
+                    <%= if member.indie_id == @player_info.leader_id do %>
+                      <span class="text-yellow-600 font-semibold">👑</span>
+                    <% end %>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <%= if @player_info.is_leader do %>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <p class="text-yellow-800 font-semibold">
+                👑 ¡Eres el líder del equipo!
+              </p>
+            </div>
+          <% end %>
+
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <%= if @game_state.phase == :finding_team do %>
+              <p class="text-gray-700 font-semibold">
+                🔍 ¡Busca a las personas con el mismo emoji <%= @player_info.group_emoji %>!
+              </p>
+              <p class="text-gray-600 text-sm mt-2">
+                Preséntense entre ustedes y prepárense para la pregunta que vendrá después.
+              </p>
+            <% else %>
+              <p class="text-gray-700">
+                ¡Conozcan a sus compañeros de equipo! En un momento verán una pregunta para discutir juntos.
+              </p>
+            <% end %>
+          </div>
+        </div>
+      <% else %>
+        <div class="text-center">
+          <div class="text-6xl mb-4">🔄</div>
+          <p class="text-lg text-gray-600">
+            Asignándote a un grupo...
+          </p>
+        </div>
+      <% end %>
     <% end %>
   </div>
 </div>

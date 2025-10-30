@@ -80,7 +80,7 @@ defmodule IndiesShuffleWeb.CoreComponents do
     ~H"""
     <div class={[
       # Base styles
-      "flex flex-col",
+      "flex flex-col px-4",
       # If no custom class includes max-w, add default max-width
       (!String.contains?(@class || "", "max-w") && "max-w-sm mx-auto"),
       # If no custom class includes space-y, add default spacing
@@ -116,7 +116,7 @@ defmodule IndiesShuffleWeb.CoreComponents do
 
   def ui_card(assigns) do
     ~H"""
-    <div class={["bg-white/60 backdrop-blur-md rounded-lg shadow-lg", @class]} {@rest}>
+    <div class={["bg-slate-900/95 backdrop-blur-md rounded-lg shadow-lg border border-slate-700", @class]} {@rest}>
       <%= render_slot(@inner_block) %>
     </div>
     """
@@ -131,7 +131,7 @@ defmodule IndiesShuffleWeb.CoreComponents do
 
   def ui_card_header(assigns) do
     ~H"""
-    <div class={["px-4 py-3 border-b border-gray-300/30", @class]} {@rest}>
+    <div class={["px-4 py-3 border-b border-slate-700", @class]} {@rest}>
       <%= render_slot(@inner_block) %>
     </div>
     """
@@ -161,7 +161,7 @@ defmodule IndiesShuffleWeb.CoreComponents do
 
   def ui_card_footer(assigns) do
     ~H"""
-    <div class={["px-4 py-3 border-t border-gray-300/30 bg-gray-50/30 rounded-b-lg", @class]} {@rest}>
+    <div class={["px-4 py-3 border-t border-slate-700 bg-slate-800/50 rounded-b-lg", @class]} {@rest}>
       <%= render_slot(@inner_block) %>
     </div>
     """

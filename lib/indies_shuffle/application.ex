@@ -17,6 +17,7 @@ defmodule IndiesShuffle.Application do
       # Start a worker by calling: IndiesShuffle.Worker.start_link(arg)
       # {IndiesShuffle.Worker, arg},
       IndiesShuffle.BanManager,
+      IndiesShuffle.MockUsers,
       # Start to serve requests, typically the last entry
       IndiesShuffleWeb.Endpoint,
       IndiesShuffleWeb.Presence

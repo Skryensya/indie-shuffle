@@ -1,0 +1,63 @@
+<div class="min-h-screen bg-gradient-to-br from-orange-950 via-slate-950 to-slate-900 relative flex items-center justify-center p-6">
+  <div class="absolute inset-0 z-0">
+    <img src="/images/indies-cat.png" alt="Indies Cat" class="w-full h-full object-cover opacity-20" />
+    <div class="absolute inset-0 bg-slate-900/40"></div>
+  </div>
+
+  <div class="relative z-10 max-w-2xl w-full">
+    <div class="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700 p-8 text-center">
+      <!-- Emoji de celebración -->
+      <div class="text-8xl mb-6 animate-bounce">🎉</div>
+
+      <!-- Título principal -->
+      <h1 class="text-4xl font-bold text-white mb-4">
+        ¡Gracias por Participar!
+      </h1>
+
+      <!-- Mensaje de agradecimiento -->
+      <p class="text-xl text-gray-300 mb-8">
+        Esperamos que hayas disfrutado esta experiencia de conexión con otros jugadores
+      </p>
+
+      <!-- Separador -->
+      <div class="h-px bg-gradient-to-r from-transparent via-orange-500 to-transparent mb-8"></div>
+
+      <!-- Créditos -->
+      <div class="mb-8">
+        <p class="text-gray-400 mb-3">Juego creado por</p>
+        <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500 mb-4">
+          Allison Peña
+        </h2>
+
+        <!-- Enlace al sitio -->
+        <a
+          href="https://allisonpena.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+          </svg>
+          Visitar mi sitio web
+        </a>
+      </div>
+
+      <!-- Separador -->
+      <div class="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent mb-8"></div>
+
+      <!-- Botón para volver al lobby -->
+      <button
+        phx-click="return_to_lobby"
+        class="w-full px-6 py-4 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all duration-200 border border-slate-600 hover:border-slate-500"
+      >
+        <div class="flex items-center justify-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+          Volver al Lobby
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
