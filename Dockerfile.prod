@@ -1,45 +1,76 @@
-# ---- build -----
-FROM hexpm/elixir:1.16.2-erlang-26.2.5-alpine-3.19 AS build
-RUN apk add --no-cache build-base git nodejs npm python3
+# =========================
+# 🔨 BUILD STAGE
+# =========================
+FROM elixir:1.15-slim AS build
 
-ENV MIX_ENV=prod
+# Set working directory
 WORKDIR /app
+
+# Install system packages
+RUN apt-get update && apt-get install -y \
+  build-essential \
+  git \
+  curl \
+  inotify-tools \
+  python3 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Hex + Rebar
 RUN mix local.hex --force && mix local.rebar --force
 
-# Deps
+# Install Node.js 20.x (same as dev)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+  apt-get install -y nodejs && \
+  npm install -g npm@latest && \
+  rm -rf /var/lib/apt/lists/*
+
+# Copy mix files to cache deps
 COPY mix.exs mix.lock ./
-COPY config config
-RUN mix deps.get --only prod && mix deps.compile
 
-# Assets
-COPY assets assets
-RUN npm --prefix ./assets ci && npm --prefix ./assets run deploy
+# Install Elixir deps (prod only)
+RUN MIX_ENV=prod mix deps.get --only prod
 
-# Código
-COPY lib lib
-COPY priv priv
+# Copy the entire project
+COPY . .
 
-RUN mix phx.digest
-RUN mix release
+# Compile Elixir code
+RUN MIX_ENV=prod mix compile
 
-# ---- runtime -----
-FROM alpine:3.19 AS app
-RUN apk add --no-cache openssl ncurses-libs libstdc++ bash curl wget
+# Build assets (identical to dev logic)
+RUN MIX_ENV=prod mix assets.setup && \
+    MIX_ENV=prod mix assets.build
 
-RUN addgroup -S app && adduser -S app -G app
+# Generate Phoenix release
+RUN MIX_ENV=prod mix release
+
+
+# =========================
+# 🚀 RUNTIME STAGE
+# =========================
+FROM debian:bookworm-slim AS app
+
+# Install libs needed for Erlang runtime & SQLite
+RUN apt-get update && apt-get install -y \
+  openssl \
+  libncurses5 \
+  libstdc++6 \
+  libsqlite3-0 \
+  ca-certificates \
+  curl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
 WORKDIR /app
 
-# Create database directory with proper permissions
-RUN mkdir -p /app/db && chown -R app:app /app
+# Copy release from build stage
+COPY --from=build /app/_build/prod/rel /app/
 
-COPY --from=build /app/_build/prod/rel/indies_shuffle ./
-RUN chown -R app:app /app
+# Default env vars
+ENV MIX_ENV=prod \
+    HOME=/app
 
-ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000
-
-HEALTHCHECK --interval=30s --timeout=3s \
-  CMD wget -qO- http://127.0.0.1:${PORT}/ || exit 1
-
-USER app
+# Phoenix port
 EXPOSE 4000
-ENTRYPOINT ["bin/indies_shuffle", "start"]
+
+# HEALTHCHECK-compatible command
+CMD ["bin/indies", "start"]
