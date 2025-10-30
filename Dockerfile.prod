@@ -73,4 +73,4 @@ ENV MIX_ENV=prod \
 EXPOSE 4000
 
 # HEALTHCHECK-compatible command
-CMD ["bin/indies", "start"]
+CMD ["bin/indies_shuffle", "start"]
