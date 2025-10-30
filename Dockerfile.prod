@@ -3,10 +3,8 @@
 # =========================
 FROM elixir:1.15-slim AS build
 
-# Set working directory
 WORKDIR /app
 
-# Install system packages
 RUN apt-get update && apt-get install -y \
   build-essential \
   git \
@@ -15,32 +13,20 @@ RUN apt-get update && apt-get install -y \
   python3 \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Hex + Rebar
 RUN mix local.hex --force && mix local.rebar --force
 
-# Install Node.js 20.x (same as dev)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
   apt-get install -y nodejs && \
   npm install -g npm@latest && \
   rm -rf /var/lib/apt/lists/*
 
-# Copy mix files to cache deps
 COPY mix.exs mix.lock ./
-
-# Install Elixir deps (prod only)
 RUN MIX_ENV=prod mix deps.get --only prod
 
-# Copy the entire project
 COPY . .
 
-# Compile Elixir code
 RUN MIX_ENV=prod mix compile
-
-# Build assets (identical to dev logic)
-RUN MIX_ENV=prod mix assets.setup && \
-    MIX_ENV=prod mix assets.build
-
-# Generate Phoenix release
+RUN MIX_ENV=prod mix assets.setup && MIX_ENV=prod mix assets.build
 RUN MIX_ENV=prod mix release
 
 
@@ -49,7 +35,6 @@ RUN MIX_ENV=prod mix release
 # =========================
 FROM debian:bookworm-slim AS app
 
-# Install libs needed for Erlang runtime & SQLite
 RUN apt-get update && apt-get install -y \
   openssl \
   libncurses5 \
@@ -57,20 +42,23 @@ RUN apt-get update && apt-get install -y \
   libsqlite3-0 \
   ca-certificates \
   curl \
+  bash \
   && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy release from build stage
-COPY --from=build /app/_build/prod/rel /app/
+# ✅ Copia SOLO el release (esto crea /app/indies_shuffle)
+COPY --from=build /app/_build/prod/rel/indies_shuffle /app/indies_shuffle
 
-# Default env vars
 ENV MIX_ENV=prod \
-    HOME=/app
+    LANG=C.UTF-8 \
+    PHX_SERVER=true \
+    PORT=4000
 
-# Phoenix port
 EXPOSE 4000
 
-# HEALTHCHECK-compatible command
+# ✅ MUY IMPORTANTE: entrar al folder correcto del release
+WORKDIR /app/indies_shuffle
+
+# ✅ Ejecutar el release correctamente
 CMD ["bin/indies_shuffle", "start"]
